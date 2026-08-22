@@ -14,18 +14,6 @@ const AdminLogin = () => {
   const navigate = useNavigate();
   const { signIn } = useAuth();
 
-  const adminAccounts = [
-    { role: "Super Admin", email: "superadmin@omnicampus.com", pass: "OmniSuper@2026!" },
-    { role: "Library Admin", email: "libadmin@omnicampus.com", pass: "LibManage#2026" },
-    { role: "Medical Admin", email: "medadmin@omnicampus.com", pass: "MedSecure*2026" },
-    { role: "Club Admin", email: "clubadmin@omnicampus.com", pass: "ClubConnect$2026" },
-  ];
-
-  const fillCredentials = (roleEmail: string, rolePass: string) => {
-    setEmail(roleEmail);
-    setPassword(rolePass);
-  };
-
   const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -75,23 +63,6 @@ const AdminLogin = () => {
           </div>
 
           <div className="p-8">
-            {/* Quick Fill Buttons */}
-            <div className="mb-8">
-              <label className="block mb-3 text-muted-foreground text-xs font-bold uppercase tracking-wider text-center">Select Role to Auto-Fill</label>
-              <div className="grid grid-cols-2 gap-2">
-                {adminAccounts.map((acc) => (
-                  <button
-                    key={acc.role}
-                    type="button"
-                    onClick={() => fillCredentials(acc.email, acc.pass)}
-                    className="py-2 px-3 border border-border rounded-md text-xs font-semibold hover:bg-accent hover:text-primary transition-all text-center"
-                  >
-                    {acc.role}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <form onSubmit={handleAdminLogin} className="space-y-6">
               <div>
                 <label className="block mb-2 text-muted-foreground text-sm font-medium">Admin Email</label>
