@@ -68,6 +68,11 @@ const LoginPage = () => {
                   required
                   className="w-full px-4 py-3 bg-card border border-border rounded-md text-foreground focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_rgba(255,215,0,0.1)] transition-all duration-300"
                 />
+                <div className="mt-2 text-right">
+                  <Link to="/forgot-password" className="text-sm text-primary font-medium hover:underline">
+                    Forgot password?
+                  </Link>
+                </div>
               </div>
               <button
                 type="submit"

@@ -7,6 +7,8 @@ import { AuthProvider } from "@/features/auth/context/AuthContext";
 import ProtectedRoute from "@/features/auth/components/ProtectedRoute";
 import Index from "./pages/Index.tsx";
 import LoginPage from "@/features/auth/pages/LoginPage";
+import ForgotPasswordPage from "@/features/auth/pages/ForgotPasswordPage";
+import ResetPasswordPage from "@/features/auth/pages/ResetPasswordPage";
 import AdminLogin from "./pages/AdminLogin.tsx";
 import Register from "./pages/Register.tsx";
 import DashboardPage from "@/features/dashboard/DashboardPage";
@@ -30,6 +32,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/register" element={<Register />} />
             <Route path="/dashboard" element={
