@@ -21,13 +21,21 @@ const Footer = () => {
         <div>
           <h4 className="text-accent mb-6">Contact</h4>
           <ul className="space-y-4">
-            <li className="text-primary-foreground/80">support@omnicampus.edu</li>
-            <li className="text-primary-foreground/80">+254 700 123 456</li>
+            <li>
+              <a href="mailto:support@omnicampus.edu" className="text-primary-foreground/80 hover:text-accent transition-colors duration-300">
+                support@omnicampus.edu
+              </a>
+            </li>
+            <li>
+              <a href="tel:+254700123456" className="text-primary-foreground/80 hover:text-accent transition-colors duration-300">
+                +254 700 123 456
+              </a>
+            </li>
           </ul>
         </div>
       </div>
       <div className="text-center pt-12 mt-12 border-t border-primary-foreground/20 text-primary-foreground/60">
-        © 2025 OmniCampus. All rights reserved.
+        © 2026 OmniCampus. All rights reserved.
       </div>
     </footer>
   );
