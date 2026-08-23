@@ -488,6 +488,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_public_stats: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          books_available: number
+          active_clubs: number
+          items_recovered: number
+          registered_students: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
