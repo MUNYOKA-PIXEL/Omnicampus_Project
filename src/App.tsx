@@ -13,14 +13,21 @@ import AdminLogin from "./pages/AdminLogin.tsx";
 import Register from "./pages/Register.tsx";
 import DashboardPage from "@/features/dashboard/DashboardPage";
 import { LibraryPage } from "@/features/library";
+import LibraryAdminPage from "@/features/library/pages/LibraryAdminPage";
 import { LostFoundPage } from "@/features/lost-found";
 import { ClubsPage } from "@/features/clubs";
 import { MedicalPage } from "@/features/medical";
 import { ProfilePage } from "@/features/profile";
 import { AIAssistantPage } from "@/features/ai-assistant";
 import NotFound from "./pages/NotFound.tsx";
+import { useAuth } from "@/features/auth/context/AuthContext";
 
 const queryClient = new QueryClient();
+
+const LibraryRoute = () => {
+  const { role } = useAuth();
+  return role === "libadmin" || role === "superadmin" ? <LibraryAdminPage /> : <LibraryPage />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -48,7 +55,7 @@ const App = () => (
             } />
             <Route path="/library" element={
               <ProtectedRoute allowedRoles={["superadmin", "libadmin", "student"]}>
-                <LibraryPage />
+                <LibraryRoute />
               </ProtectedRoute>
             } />
             <Route path="/lost-found" element={
