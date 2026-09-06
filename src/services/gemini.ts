@@ -7,6 +7,15 @@ const MODELS = [
   { name: "gemini-3.6-pro", version: "v1beta" },
 ];
 
+function cleanAssistantResponse(response: string): string {
+  return response
+    .replace(/^#{1,6}\s*/gm, "")
+    .replace(/\*{1,3}|_{1,3}|`/g, "")
+    .replace(/^\s*[-+]\s+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 export const generateCampusResponse = createServerFn({ method: "POST" })
   .validator(
     z.object({
@@ -47,11 +56,13 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
       - Recent Lost & Found: ${data.context.recentLostFound.join(", ") || "No recent reports"}
 
       Guidelines:
-      1. Be professional, helpful, and energetic.
-      2. Use USIU-Africa and OmniCampus terminology.
-      3. Use the "Current Campus Context" above to answer questions accurately.
-      4. If a student asks for something not in the context, politely explain you don't see it in the current records.
-      5. NEVER ask for Student IDs or private UUIDs.
+      1. Sound like a warm, knowledgeable human campus staff member, not a robot.
+      2. Use simple, natural language and keep answers concise unless the student asks for detail.
+      3. Use USIU-Africa and OmniCampus terminology naturally.
+      4. Use the "Current Campus Context" above to answer questions accurately.
+      5. If a student asks for something not in the context, say that plainly and suggest the relevant campus service.
+      6. Do not use Markdown, asterisks, hashtags, code formatting, or formal section headings.
+      7. NEVER ask for Student IDs or private UUIDs.
     `;
 
     const lastErrors: string[] = [];
@@ -66,7 +77,7 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
           { text: systemPrompt },
           { text: `User Question: ${data.userPrompt}` },
         ]);
-        return result.response.text();
+        return cleanAssistantResponse(result.response.text());
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         console.warn(`[Gemini Fallback] Model ${config.name} failed:`, message);
