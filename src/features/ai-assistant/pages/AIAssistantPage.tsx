@@ -9,6 +9,7 @@ import {
   Search,
   Sparkles,
   UserRound,
+	Users,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -29,15 +30,57 @@ interface PendingAction {
 	prompt: string;
 }
 
-const suggestedPrompts = [
-  { icon: BookOpen, label: "Find available library books" },
-  { icon: CalendarDays, label: "What campus events are coming up?" },
-  { icon: HeartPulse, label: "Which doctors are available today?" },
-  { icon: Search, label: "Search recent lost and found reports" },
-];
+const assistantRoleContent = {
+	student: {
+		prompts: [
+			{ icon: BookOpen, label: "Find available library books" },
+			{ icon: CalendarDays, label: "What campus events are coming up?" },
+			{ icon: HeartPulse, label: "Which doctors are available today?" },
+			{ icon: Search, label: "Search recent lost and found reports" },
+		],
+		help: "Library availability, campus events, available doctors, appointments, and recent lost and found reports.",
+	},
+	libadmin: {
+		prompts: [
+			{ icon: BookOpen, label: "Add a new book to inventory" },
+			{ icon: BookOpen, label: "Show pending acquisition requests" },
+			{ icon: Search, label: "Which loans are overdue?" },
+			{ icon: CalendarDays, label: "Mark a loan as returned" },
+		],
+		help: "Book inventory, loans and returns, acquisition requests, and library digital resources.",
+	},
+	clubadmin: {
+		prompts: [
+			{ icon: CalendarDays, label: "Create a club event" },
+			{ icon: Search, label: "Show registrations for an event" },
+			{ icon: BookOpen, label: "Add a club resource" },
+			{ icon: Users, label: "Show the member roster" },
+		],
+		help: "Club registry, events, member rosters, event registrations, and club resources.",
+	},
+	medadmin: {
+		prompts: [
+			{ icon: CalendarDays, label: "Show pending appointments" },
+			{ icon: HeartPulse, label: "Add a new practitioner" },
+			{ icon: HeartPulse, label: "Add pharmacy medication" },
+			{ icon: BookOpen, label: "Publish a wellness resource" },
+		],
+		help: "Appointment schedules, practitioners, pharmacy stock, and wellness resources.",
+	},
+	superadmin: {
+		prompts: [
+			{ icon: BookOpen, label: "Review library operations" },
+			{ icon: CalendarDays, label: "Review club events and registrations" },
+			{ icon: HeartPulse, label: "Review medical appointments" },
+			{ icon: Search, label: "Summarize campus operations" },
+		],
+		help: "Library, clubs, medical operations, campus records, and cross-domain oversight.",
+	},
+} as const;
 
 const AIAssistantPage = () => {
 	const { profile, user, role } = useAuth();
+	const roleContent = assistantRoleContent[role ?? "student"];
 	const [input, setInput] = useState("");
 	const [isTyping, setIsTyping] = useState(false);
 	const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -46,7 +89,9 @@ const AIAssistantPage = () => {
 		{
 			id: 0,
 			role: "assistant",
-			text: "Hi! I’m Omni-Intelligence. I can help you find campus information about the library, clubs, medical services, and lost and found.",
+			text: role === "student"
+				? "Hi! I’m Omni-Intelligence. I can help you find campus information about the library, clubs, medical services, and lost and found."
+				: `Hi! I’m Omni-Intelligence. I’m ready to help with your ${role === "superadmin" ? "campus operations" : role?.replace("admin", " administration")} dashboard.`,
 		},
 	]);
 
@@ -245,7 +290,7 @@ const AIAssistantPage = () => {
 						<div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
 							<h2 className="flex items-center gap-2 font-semibold text-foreground"><Sparkles className="h-4 w-4 text-accent" /> Try asking</h2>
 							<div className="mt-4 space-y-2">
-								{suggestedPrompts.map(({ icon: Icon, label }) => (
+								{roleContent.prompts.map(({ icon: Icon, label }) => (
 									<button key={label} type="button" onClick={() => setInput(label)} className="flex w-full items-center gap-3 rounded-lg border border-border bg-background px-3 py-3 text-left text-sm text-foreground transition-colors hover:border-primary hover:text-primary">
 										<Icon className="h-4 w-4 shrink-0 text-primary" />
 										<span>{label}</span>
@@ -255,7 +300,7 @@ const AIAssistantPage = () => {
 						</div>
 						<div className="rounded-2xl border border-primary/15 bg-primary p-5 text-primary-foreground shadow-sm">
 							<h2 className="font-semibold">What I can help with</h2>
-							<p className="mt-2 text-sm leading-6 text-primary-foreground/75">Library availability, campus events, available doctors, and recent lost and found reports.</p>
+							<p className="mt-2 text-sm leading-6 text-primary-foreground/75">{roleContent.help}</p>
 						</div>
 					</aside>
 				</div>
