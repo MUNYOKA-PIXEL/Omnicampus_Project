@@ -108,7 +108,7 @@ const App = () => (
             <Route
               path="/assistant"
               element={
-                <ProtectedRoute allowedRoles={["superadmin", "student"]}>
+                <ProtectedRoute allowedRoles={["superadmin", "student", "libadmin", "medadmin", "clubadmin"]}>
                   <AIAssistantPage />
                 </ProtectedRoute>
               }

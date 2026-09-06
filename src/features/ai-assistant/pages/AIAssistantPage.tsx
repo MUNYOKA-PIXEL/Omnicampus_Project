@@ -192,17 +192,6 @@ const AIAssistantPage = () => {
 											<UserRound className="h-4 w-4" />
 										</div>
 									)}
-									{pendingAction && (
-										<div className="rounded-xl border border-accent/50 bg-accent/10 p-4 text-sm text-foreground">
-											<p className="font-semibold">I’m ready to use {pendingAction.tool}.</p>
-											<p className="mt-1 text-muted-foreground">This action can change your campus records. Confirm only if the details are correct.</p>
-											<div className="mt-3 flex gap-2">
-												<Button type="button" size="sm" onClick={() => void confirmAction()}>Confirm action</Button>
-												<Button type="button" size="sm" variant="outline" onClick={() => { setPendingAction(null); addAssistantMessage("No problem. I left that action unchanged."); }}>Cancel</Button>
-											</div>
-										</div>
-									)}
-								<div ref={messagesEndRef} aria-hidden="true" />
 								</div>
 							))}
 							{isTyping && (
@@ -213,6 +202,17 @@ const AIAssistantPage = () => {
 									</div>
 								</div>
 							)}
+							{pendingAction && (
+								<div className="rounded-xl border border-accent/50 bg-accent/10 p-4 text-sm text-foreground">
+									<p className="font-semibold">I’m ready to use {pendingAction.tool}.</p>
+									<p className="mt-1 text-muted-foreground">This action can change your campus records. Confirm only if the details are correct.</p>
+									<div className="mt-3 flex gap-2">
+										<Button type="button" size="sm" onClick={() => void confirmAction()}>Confirm action</Button>
+										<Button type="button" size="sm" variant="outline" onClick={() => { setPendingAction(null); addAssistantMessage("No problem. I left that action unchanged."); }}>Cancel</Button>
+									</div>
+								</div>
+							)}
+							<div ref={messagesEndRef} aria-hidden="true" />
 						</div>
 
 						<form onSubmit={sendMessage} className="border-t border-border bg-card p-4 sm:p-5">
