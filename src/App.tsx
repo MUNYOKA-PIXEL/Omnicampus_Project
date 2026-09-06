@@ -16,7 +16,9 @@ import { LibraryPage } from "@/features/library";
 import LibraryAdminPage from "@/features/library/pages/LibraryAdminPage";
 import { LostFoundPage } from "@/features/lost-found";
 import { ClubsPage } from "@/features/clubs";
+import ClubAdminPage from "@/features/clubs/pages/ClubAdminPage";
 import { MedicalPage } from "@/features/medical";
+import MedicalAdminPage from "@/features/medical/pages/MedicalAdminPage";
 import { ProfilePage } from "@/features/profile";
 import { AIAssistantPage } from "@/features/ai-assistant";
 import NotFound from "./pages/NotFound.tsx";
@@ -27,6 +29,16 @@ const queryClient = new QueryClient();
 const LibraryRoute = () => {
   const { role } = useAuth();
   return role === "libadmin" || role === "superadmin" ? <LibraryAdminPage /> : <LibraryPage />;
+};
+
+const ClubsRoute = () => {
+  const { role } = useAuth();
+  return role === "clubadmin" || role === "superadmin" ? <ClubAdminPage /> : <ClubsPage />;
+};
+
+const MedicalRoute = () => {
+  const { role } = useAuth();
+  return role === "medadmin" || role === "superadmin" ? <MedicalAdminPage /> : <MedicalPage />;
 };
 
 const App = () => (
@@ -43,41 +55,64 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/admin/login" element={<AdminLogin />} />
             <Route path="/register" element={<Register />} />
-            <Route path="/dashboard" element={
-              <ProtectedRoute allowedRoles={["superadmin", "student"]}>
-                <DashboardPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/profile" element={
-              <ProtectedRoute allowedRoles={["superadmin", "student", "libadmin", "medadmin", "clubadmin"]}>
-                <ProfilePage />
-              </ProtectedRoute>
-            } />
-            <Route path="/library" element={
-              <ProtectedRoute allowedRoles={["superadmin", "libadmin", "student"]}>
-                <LibraryRoute />
-              </ProtectedRoute>
-            } />
-            <Route path="/lost-found" element={
-              <ProtectedRoute allowedRoles={["superadmin", "student"]}>
-                <LostFoundPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/clubs" element={
-              <ProtectedRoute allowedRoles={["superadmin", "clubadmin", "student"]}>
-                <ClubsPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/medical" element={
-              <ProtectedRoute allowedRoles={["superadmin", "medadmin", "student"]}>
-                <MedicalPage />
-              </ProtectedRoute>
-            } />
-            <Route path="/assistant" element={
-              <ProtectedRoute allowedRoles={["superadmin", "student"]}>
-                <AIAssistantPage />
-              </ProtectedRoute>
-            } />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute allowedRoles={["superadmin", "student"]}>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["superadmin", "student", "libadmin", "medadmin", "clubadmin"]}
+                >
+                  <ProfilePage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/library"
+              element={
+                <ProtectedRoute allowedRoles={["superadmin", "libadmin", "student"]}>
+                  <LibraryRoute />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/lost-found"
+              element={
+                <ProtectedRoute allowedRoles={["superadmin", "student"]}>
+                  <LostFoundPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/clubs"
+              element={
+                <ProtectedRoute allowedRoles={["superadmin", "clubadmin", "student"]}>
+                  <ClubsRoute />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/medical"
+              element={
+                <ProtectedRoute allowedRoles={["superadmin", "medadmin", "student"]}>
+                  <MedicalRoute />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/assistant"
+              element={
+                <ProtectedRoute allowedRoles={["superadmin", "student"]}>
+                  <AIAssistantPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </AuthProvider>
