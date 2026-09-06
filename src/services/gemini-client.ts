@@ -1,4 +1,5 @@
 import { getCampusContext } from "./campusContext";
+import { supabase } from "@/integrations/supabase/client";
 import {
   generateCampusResponse as generateCampusResponseServer,
   runCampusAgentStep as runCampusAgentStepServer,
@@ -31,7 +32,11 @@ export const runCampusAgentStep = async (
   role: CampusRole = "student",
 ): Promise<CampusAgentStep> => {
   const context = await getCampusContext();
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("You must be signed in to use the campus agent.");
+  }
   return runCampusAgentStepServer({
-    data: { userPrompt, userProfile, context, toolResult, role },
+    data: { userPrompt, userProfile, context, toolResult, role, accessToken: session.access_token },
   });
 };

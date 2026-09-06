@@ -47,7 +47,16 @@ const LostFoundPage = () => {
       .from("lost_found_items")
       .select("*")
       .order("date_reported", { ascending: false });
-    setItems(data || []);
+    const itemsWithSignedImages = await Promise.all(
+      (data || []).map(async (item) => {
+        if (!item.image_url || item.image_url.startsWith("http")) return item;
+        const { data: signedImage } = await supabase.storage
+          .from("lost-found-images")
+          .createSignedUrl(item.image_url, 3600);
+        return { ...item, image_url: signedImage?.signedUrl || null };
+      }),
+    );
+    setItems(itemsWithSignedImages);
     setLoading(false);
   };
   useEffect(() => {
@@ -143,7 +152,7 @@ const LostFoundPage = () => {
         });
         return;
       }
-      imageUrl = supabase.storage.from("lost-found-images").getPublicUrl(path).data.publicUrl;
+      imageUrl = path;
     }
     const { error } = await supabase
       .from("lost_found_items")

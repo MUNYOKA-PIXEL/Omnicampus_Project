@@ -7,8 +7,10 @@ export const fetchUserRole = async (userId: string): Promise<AppRole | null> => 
     .from("user_roles")
     .select("role")
     .eq("user_id", userId)
-    .maybeSingle();
-  return (data?.role as AppRole) ?? null;
+    .order("role");
+  const roles = (data ?? []).map((row) => row.role as AppRole);
+  const priority: AppRole[] = ["superadmin", "libadmin", "medadmin", "clubadmin", "student"];
+  return priority.find((candidate) => roles.includes(candidate)) ?? null;
 };
 
 export const fetchUserProfile = async (userId: string) => {

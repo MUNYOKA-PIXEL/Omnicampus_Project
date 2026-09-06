@@ -1,6 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createServerFn } from "@tanstack/react-start";
+import { getRequestHeader } from "@tanstack/react-start/server";
+import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import type { Database } from "@/integrations/supabase/types";
 
 const MODELS = [
   { name: "gemini-3.6-flash", version: "v1beta" },
@@ -16,6 +19,37 @@ const agentStepSchema = z.object({
   args: agentArgsSchema.default({}),
   requiresConfirmation: z.boolean().default(false),
 });
+
+const roleSchema = z.enum(["superadmin", "student", "libadmin", "medadmin", "clubadmin"]);
+
+async function getAuthenticatedAgentContext(accessToken?: string) {
+  const authorization = getRequestHeader("authorization");
+  const token = accessToken || authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+  if (!token || !supabaseUrl || !supabaseKey) return null;
+
+  const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData.user) return null;
+
+  const [{ data: roleRows }, { data: profile }] = await Promise.all([
+    supabase.from("user_roles").select("role").eq("user_id", userData.user.id),
+    supabase.from("profiles").select("course, year_of_study").eq("id", userData.user.id).maybeSingle(),
+  ]);
+  const rolePriority = ["superadmin", "libadmin", "medadmin", "clubadmin", "student"];
+  const role = rolePriority.find((candidate) => roleRows?.some((row) => row.role === candidate));
+
+  return {
+    userId: userData.user.id,
+    role: roleSchema.parse(role ?? "student"),
+    userProfile: profile ?? undefined,
+  };
+}
 
 function cleanAssistantResponse(response: string): string {
   return response
@@ -35,6 +69,7 @@ export const runCampusAgentStep = createServerFn({ method: "POST" })
   .validator(
     z.object({
       userPrompt: z.string().min(1).max(4000),
+      accessToken: z.string().min(20),
       userProfile: z
         .object({
           course: z.string().nullable().optional(),
@@ -54,6 +89,15 @@ export const runCampusAgentStep = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    const authenticated = await getAuthenticatedAgentContext(data.accessToken);
+    if (!authenticated) {
+      return {
+        type: "final" as const,
+        message: "Please sign in again before using the campus assistant.",
+        args: {},
+        requiresConfirmation: false,
+      };
+    }
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       return {
@@ -92,8 +136,8 @@ Rules:
 7. After a tool result is provided, return a concise, human-sounding final answer.
 8. Do not request student IDs, passwords, or private UUIDs.
 
-Signed-in role: ${data.role}
-Student profile: ${JSON.stringify(data.userProfile ?? {})}
+Signed-in role: ${authenticated.role}
+Student profile: ${JSON.stringify(authenticated.userProfile ?? {})}
 Campus context: ${JSON.stringify(data.context)}
 Student request: ${data.userPrompt}
 ${data.toolResult ? `Tool result from ${data.toolResult.name}: ${data.toolResult.result}` : ""}

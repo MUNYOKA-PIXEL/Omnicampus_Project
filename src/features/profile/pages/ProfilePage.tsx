@@ -19,6 +19,7 @@ const ProfilePage = () => {
   });
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -30,6 +31,28 @@ const ProfilePage = () => {
       year_of_study: profile?.year_of_study ? String(profile.year_of_study) : "",
     });
   }, [profile]);
+
+  useEffect(() => {
+    let active = true;
+    const resolveAvatar = async () => {
+      if (!profile?.avatar_url) {
+        setAvatarUrl(null);
+        return;
+      }
+      if (profile.avatar_url.startsWith("http")) {
+        setAvatarUrl(profile.avatar_url);
+        return;
+      }
+      const { data } = await supabase.storage
+        .from("profile-avatars")
+        .createSignedUrl(profile.avatar_url, 3600);
+      if (active) setAvatarUrl(data?.signedUrl || null);
+    };
+    void resolveAvatar();
+    return () => {
+      active = false;
+    };
+  }, [profile?.avatar_url]);
 
   const setField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -83,8 +106,7 @@ const ProfilePage = () => {
       toast({ title: "Upload failed", description: upload.error.message, variant: "destructive" });
       return;
     }
-    const avatarUrl = supabase.storage.from("profile-avatars").getPublicUrl(path).data.publicUrl;
-    const { error } = await updateProfile({ avatar_url: avatarUrl });
+    const { error } = await updateProfile({ avatar_url: path });
     setUploadingAvatar(false);
     if (error) {
       toast({ title: "Profile update failed", description: error.message, variant: "destructive" });
@@ -114,9 +136,9 @@ const ProfilePage = () => {
           <section className="rounded-xl border border-border bg-card p-8 text-center shadow-usiu">
             <div className="relative mx-auto h-32 w-32">
               <div className="flex h-32 w-32 items-center justify-center rounded-full border-4 border-accent bg-muted text-4xl font-bold text-primary">
-                {profile?.avatar_url ? (
+                {avatarUrl ? (
                   <img
-                    src={profile.avatar_url}
+                    src={avatarUrl}
                     alt="Profile"
                     className="h-full w-full rounded-full object-cover"
                   />

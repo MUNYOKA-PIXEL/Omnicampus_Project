@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { supabase } from "@/integrations/supabase/client";
+import { z } from "zod";
 
 /**
  * Counts the number of appointments for a specific user.
@@ -171,6 +172,47 @@ export const ADMIN_TOOL_ROLES: Record<string, string[]> = {
   medicalAddDoctor: ["medadmin", "superadmin"], medicalDeleteDoctor: ["medadmin", "superadmin"],
   medicalAddMedication: ["medadmin", "superadmin"], medicalDeleteMedication: ["medadmin", "superadmin"],
   medicalAddResource: ["medadmin", "superadmin"], medicalDeleteResource: ["medadmin", "superadmin"],
+};
+
+const idArgs = z.object({ id: z.string().uuid() }).strict();
+const toolArgumentSchemas: Record<string, z.ZodTypeAny> = {
+  countAppointments: z.object({}).strict(),
+  readAppointments: z.object({}).strict(),
+  countCourses: z.object({}).strict(),
+  readCourses: z.object({}).strict(),
+  insertAppointment: z.object({
+    doctor_id: z.string().uuid(),
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    time: z.string().regex(/^\d{2}:\d{2}$/),
+    reason: z.string().max(500).optional(),
+  }).strict(),
+  libraryAddBook: z.object({ title: z.string().min(1).max(200), author: z.string().min(1).max(200), category: z.string().min(1).max(100), copies: z.coerce.number().int().min(0).max(10000) }).strict(),
+  libraryUpdateBook: idArgs.extend({ title: z.string().min(1).max(200), author: z.string().min(1).max(200), category: z.string().min(1).max(100), copies: z.coerce.number().int().min(0).max(10000) }).strict(),
+  libraryDeleteBook: idArgs,
+  libraryReturnBook: z.object({ loan_id: z.string().uuid() }).strict(),
+  libraryUpdateRequest: idArgs.extend({ status: z.enum(["approved", "rejected"]) }).strict(),
+  libraryAddResource: z.object({ title: z.string().min(1).max(200), file_url: z.string().url().nullable().optional() }).strict(),
+  libraryDeleteResource: idArgs,
+  clubCreate: z.object({ name: z.string().min(1).max(200), description: z.string().max(2000), dues: z.string().max(100), meeting_day: z.string().max(100) }).strict(),
+  clubDelete: idArgs,
+  clubCreateEvent: z.object({ club_id: z.string().uuid(), title: z.string().min(1).max(200), description: z.string().max(2000), date: z.string(), time: z.string(), location: z.string().max(200) }).strict(),
+  clubDeleteEvent: idArgs,
+  clubAddResource: z.object({ title: z.string().min(1).max(200), file_url: z.string().url().nullable().optional() }).strict(),
+  clubDeleteResource: idArgs,
+  medicalUpdateAppointment: idArgs.extend({ status: z.enum(["confirmed", "cancelled", "completed"]) }).strict(),
+  medicalAddDoctor: z.object({ name: z.string().min(1).max(200), specialty: z.string().min(1).max(200) }).strict(),
+  medicalDeleteDoctor: idArgs,
+  medicalAddMedication: z.object({ name: z.string().min(1).max(200), type: z.string().min(1).max(100), price: z.string().min(1).max(100) }).strict(),
+  medicalDeleteMedication: idArgs,
+  medicalAddResource: z.object({ title: z.string().min(1).max(200), file_url: z.string().url().nullable().optional() }).strict(),
+  medicalDeleteResource: idArgs,
+};
+
+export const validateToolArgs = (tool: string, args: Record<string, any>) => {
+  const schema = toolArgumentSchemas[tool];
+  if (!schema) return null;
+  const result = schema.safeParse(args);
+  return result.success ? (result.data as Record<string, any>) : null;
 };
 
 // Map of tool names to their implementation functions

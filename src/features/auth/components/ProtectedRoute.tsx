@@ -24,6 +24,14 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     return <Navigate to="/login" replace />;
   }
 
+  if (allowedRoles && !role) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-muted-foreground">
+        Your account does not have an assigned application role. Please contact an administrator.
+      </div>
+    );
+  }
+
   if (allowedRoles && role && !allowedRoles.includes(role) && role !== "superadmin") {
     return <Navigate to={getRoleDashboardPath(role)} replace />;
   }

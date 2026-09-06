@@ -60,8 +60,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       fetchUserRole(userId),
       fetchUserProfile(userId),
     ]);
-    setRole(userRole);
-    setProfile(userProfile);
+    return { userRole, userProfile };
   };
 
   const refreshProfile = async () => {
@@ -81,31 +80,46 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    let active = true;
+    let loadGeneration = 0;
+
+    const applySession = async (newSession: Session | null) => {
+      const generation = ++loadGeneration;
       setSession(newSession);
       setUser(newSession?.user ?? null);
+      setLoading(true);
 
-      if (newSession?.user) {
-        setTimeout(() => loadUserData(newSession.user.id), 0);
-      } else {
-        setRole(null);
-        setProfile(null);
+      if (!newSession?.user) {
+        if (active && generation === loadGeneration) {
+          setRole(null);
+          setProfile(null);
+          setLoading(false);
+        }
+        return;
       }
-      setLoading(false);
+
+      const { userRole, userProfile } = await loadUserData(newSession.user.id);
+      if (active && generation === loadGeneration) {
+        setRole(userRole);
+        setProfile(userProfile);
+        setLoading(false);
+      }
+    };
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, newSession) => {
+      void applySession(newSession);
     });
 
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
-      setSession(existingSession);
-      setUser(existingSession?.user ?? null);
-      if (existingSession?.user) {
-        loadUserData(existingSession.user.id);
-      }
-      setLoading(false);
+      void applySession(existingSession);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      active = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const handleSignOut = async () => {

@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { runCampusAgentStep, type CampusAgentStep } from "@/services/gemini-client";
-import { ADMIN_TOOL_ROLES, toolRegistry } from "@/services/tools";
+import { ADMIN_TOOL_ROLES, toolRegistry, validateToolArgs } from "@/services/tools";
 
 interface ChatMessage {
   id: number;
@@ -118,8 +118,13 @@ const AIAssistantPage = () => {
 			addAssistantMessage("That action is outside your administrator permissions.");
 			return;
 		}
+		const validatedArgs = validateToolArgs(tool, args);
+		if (!validatedArgs) {
+			addAssistantMessage("I need a few more valid details before I can perform that action.");
+			return;
+		}
 
-		const result = await executeTool(user.id, args);
+		const result = await executeTool(user.id, validatedArgs);
 		const finalStep = await runCampusAgentStep(
 			prompt,
 			{ course: profile?.course, year_of_study: profile?.year_of_study },
