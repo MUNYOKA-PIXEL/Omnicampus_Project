@@ -15,7 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { runCampusAgentStep, type CampusAgentStep } from "@/services/gemini-client";
-import { toolRegistry } from "@/services/tools";
+import { ADMIN_TOOL_ROLES, toolRegistry } from "@/services/tools";
 
 interface ChatMessage {
   id: number;
@@ -37,7 +37,7 @@ const suggestedPrompts = [
 ];
 
 const AIAssistantPage = () => {
-	const { profile, user } = useAuth();
+	const { profile, user, role } = useAuth();
 	const [input, setInput] = useState("");
 	const [isTyping, setIsTyping] = useState(false);
 	const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -69,12 +69,17 @@ const AIAssistantPage = () => {
 			addAssistantMessage("I do not have permission to perform that campus action yet.");
 			return;
 		}
+		if (ADMIN_TOOL_ROLES[tool] && (!role || !ADMIN_TOOL_ROLES[tool].includes(role))) {
+			addAssistantMessage("That action is outside your administrator permissions.");
+			return;
+		}
 
 		const result = await executeTool(user.id, args);
 		const finalStep = await runCampusAgentStep(
 			prompt,
 			{ course: profile?.course, year_of_study: profile?.year_of_study },
 			{ name: tool, result },
+			role ?? "student",
 		);
 		if (finalStep.type === "final") {
 			addAssistantMessage(finalStep.message);
@@ -91,6 +96,10 @@ const AIAssistantPage = () => {
 
 		if (!step.tool || !toolRegistry[step.tool]) {
 			addAssistantMessage("I could not identify a safe campus action for that request.");
+			return;
+		}
+		if (ADMIN_TOOL_ROLES[step.tool] && (!role || !ADMIN_TOOL_ROLES[step.tool].includes(role))) {
+			addAssistantMessage("That action is outside your administrator permissions.");
 			return;
 		}
 
@@ -116,7 +125,7 @@ const AIAssistantPage = () => {
 			const step = await runCampusAgentStep(prompt, {
 				course: profile?.course,
 				year_of_study: profile?.year_of_study,
-			});
+			}, undefined, role ?? "student");
 			await processAgentStep(prompt, step);
 		} catch {
 			addAssistantMessage("I couldn’t connect to campus services right now. Please try again in a moment.");

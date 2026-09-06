@@ -138,11 +138,66 @@ export const readCourses = async (userId?: string) => {
   }
 };
 
+const runAdminMutation = async (userId: string, table: string, operation: string, args: Record<string, any>) => {
+  try {
+    let result: any;
+    if (operation === "insert") result = await supabase.from(table).insert({ ...args, ...(table === "resources" ? { uploaded_by: userId } : {}) });
+    if (operation === "update") result = await supabase.from(table).update(args.values).eq("id", args.id);
+    if (operation === "delete") result = await supabase.from(table).delete().eq("id", args.id);
+    if (result?.error) throw result.error;
+    await supabase.from("ai_audit_logs").insert({ user_id: userId, action: `AI_ADMIN_${operation.toUpperCase()}_${table.toUpperCase()}`, details: args });
+    return `Completed ${operation} on ${table} successfully.`;
+  } catch (error) {
+    console.error(`Admin AI ${operation} failed for ${table}:`, error);
+    return `I couldn't complete that ${operation} on ${table}. Please check the details and your admin permissions.`;
+  }
+};
+
+const returnBook = async (userId: string, args: Record<string, any>) => {
+  const { error } = await supabase.rpc("return_book", { loan_id_input: args.loan_id });
+  if (error) return "I couldn't mark that book as returned. Please check the loan ID.";
+  await supabase.from("ai_audit_logs").insert({ user_id: userId, action: "AI_ADMIN_RETURN_BOOK", details: args });
+  return "The book was marked as returned and the inventory was updated.";
+};
+
+export const ADMIN_TOOL_ROLES: Record<string, string[]> = {
+  libraryAddBook: ["libadmin", "superadmin"], libraryUpdateBook: ["libadmin", "superadmin"],
+  libraryDeleteBook: ["libadmin", "superadmin"], libraryReturnBook: ["libadmin", "superadmin"],
+  libraryUpdateRequest: ["libadmin", "superadmin"], libraryAddResource: ["libadmin", "superadmin"],
+  libraryDeleteResource: ["libadmin", "superadmin"], clubCreate: ["clubadmin", "superadmin"],
+  clubDelete: ["clubadmin", "superadmin"], clubCreateEvent: ["clubadmin", "superadmin"],
+  clubDeleteEvent: ["clubadmin", "superadmin"], clubAddResource: ["clubadmin", "superadmin"],
+  clubDeleteResource: ["clubadmin", "superadmin"], medicalUpdateAppointment: ["medadmin", "superadmin"],
+  medicalAddDoctor: ["medadmin", "superadmin"], medicalDeleteDoctor: ["medadmin", "superadmin"],
+  medicalAddMedication: ["medadmin", "superadmin"], medicalDeleteMedication: ["medadmin", "superadmin"],
+  medicalAddResource: ["medadmin", "superadmin"], medicalDeleteResource: ["medadmin", "superadmin"],
+};
+
 // Map of tool names to their implementation functions
 export const toolRegistry: Record<string, (userId: string, args: Record<string, any>) => Promise<string>> = {
   countAppointments: (userId: string) => countAppointments(userId),
   readAppointments: (userId: string) => readAppointments(userId),
   insertAppointment: (userId: string, args: any) => insertAppointment(userId, args),
   countCourses: (userId: string) => countCourses(userId),
-  readCourses: (userId: string) => readCourses(userId)
+  readCourses: (userId: string) => readCourses(userId),
+  libraryAddBook: (userId, args) => runAdminMutation(userId, "books", "insert", { ...args, available: Number(args.copies) > 0 }),
+  libraryUpdateBook: (userId, args) => runAdminMutation(userId, "books", "update", { id: args.id, values: { title: args.title, author: args.author, category: args.category, copies: Number(args.copies), available: Number(args.copies) > 0 } }),
+  libraryDeleteBook: (userId, args) => runAdminMutation(userId, "books", "delete", args),
+  libraryReturnBook: returnBook,
+  libraryUpdateRequest: (userId, args) => runAdminMutation(userId, "book_requests", "update", { id: args.id, values: { status: args.status } }),
+  libraryAddResource: (userId, args) => runAdminMutation(userId, "resources", "insert", args),
+  libraryDeleteResource: (userId, args) => runAdminMutation(userId, "resources", "delete", args),
+  clubCreate: (userId, args) => runAdminMutation(userId, "clubs", "insert", { ...args, created_by: userId }),
+  clubDelete: (userId, args) => runAdminMutation(userId, "clubs", "delete", args),
+  clubCreateEvent: (userId, args) => runAdminMutation(userId, "club_events", "insert", args),
+  clubDeleteEvent: (userId, args) => runAdminMutation(userId, "club_events", "delete", args),
+  clubAddResource: (userId, args) => runAdminMutation(userId, "resources", "insert", args),
+  clubDeleteResource: (userId, args) => runAdminMutation(userId, "resources", "delete", args),
+  medicalUpdateAppointment: (userId, args) => runAdminMutation(userId, "appointments", "update", { id: args.id, values: { status: args.status } }),
+  medicalAddDoctor: (userId, args) => runAdminMutation(userId, "doctors", "insert", { ...args, available: true }),
+  medicalDeleteDoctor: (userId, args) => runAdminMutation(userId, "doctors", "delete", args),
+  medicalAddMedication: (userId, args) => runAdminMutation(userId, "medications", "insert", { ...args, available: true }),
+  medicalDeleteMedication: (userId, args) => runAdminMutation(userId, "medications", "delete", args),
+  medicalAddResource: (userId, args) => runAdminMutation(userId, "resources", "insert", { ...args, category: "wellness" }),
+  medicalDeleteResource: (userId, args) => runAdminMutation(userId, "resources", "delete", args),
 };

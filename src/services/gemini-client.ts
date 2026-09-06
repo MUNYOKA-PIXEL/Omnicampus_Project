@@ -12,6 +12,8 @@ export type CampusAgentStep = {
   requiresConfirmation: boolean;
 };
 
+export type CampusRole = "superadmin" | "student" | "libadmin" | "medadmin" | "clubadmin";
+
 export const generateCampusResponse = async (
   userPrompt: string,
   userProfile?: { course?: string | null; year_of_study?: number | null },
@@ -26,9 +28,10 @@ export const runCampusAgentStep = async (
   userPrompt: string,
   userProfile?: { course?: string | null; year_of_study?: number | null },
   toolResult?: { name: string; result: string },
+  role: CampusRole = "student",
 ): Promise<CampusAgentStep> => {
   const context = await getCampusContext();
   return runCampusAgentStepServer({
-    data: { userPrompt, userProfile, context, toolResult },
+    data: { userPrompt, userProfile, context, toolResult, role },
   });
 };
