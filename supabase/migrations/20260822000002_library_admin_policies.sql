@@ -1,3 +1,5 @@
+drop policy if exists "Library admins can update book requests" on public.book_requests;
+
 create policy "Library admins can update book requests"
 on public.book_requests
 for update
