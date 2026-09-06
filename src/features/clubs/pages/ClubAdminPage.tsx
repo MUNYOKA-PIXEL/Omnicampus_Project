@@ -1,6 +1,7 @@
 import { useEffect, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { CalendarDays, FileText, Plus, Trash2, Users, X } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
+import MedicalEmergencyBanner from "@/components/MedicalEmergencyBanner";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -205,6 +206,7 @@ const ClubAdminPage = () => {
             </button>
           </div>
         </header>
+        <MedicalEmergencyBanner />
         <div className="mt-10 overflow-x-auto border-b border-primary whitespace-nowrap">
           <div className="flex min-w-max gap-8">
             {tabs.map((item) => (

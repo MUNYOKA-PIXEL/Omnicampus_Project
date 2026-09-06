@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Download, FilePlus, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
+import MedicalEmergencyBanner from "@/components/MedicalEmergencyBanner";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -115,6 +116,7 @@ const LibraryAdminPage = () => {
         <div><h1 className="text-3xl font-bold text-primary sm:text-4xl">Library Admin</h1><p className="mt-2 text-muted-foreground">Manage campus inventory and circulation</p></div>
         <div className="flex flex-wrap gap-3"><button onClick={openNewBook} className="inline-flex items-center gap-2 rounded-md bg-accent px-5 py-3 font-semibold text-accent-foreground"><Plus className="h-4 w-4" /> Add New Book</button><button onClick={() => setIsResourceModalOpen(true)} className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-3 font-semibold text-primary-foreground"><FilePlus className="h-4 w-4" /> Add Resource</button></div>
       </header>
+      <MedicalEmergencyBanner />
       <div className="mt-10 flex flex-col gap-3 lg:flex-row"><label className="relative block flex-1"><Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title, author..." className="h-14 w-full rounded-md border border-border bg-card pl-12 pr-4 outline-none focus:border-accent" /></label><select value={category} onChange={(event) => setCategory(event.target.value)} className="h-14 rounded-md border border-border bg-card px-4 outline-none focus:border-accent">{categories.map((item) => <option key={item} value={item}>{item === "all" ? "All Categories" : item}</option>)}</select></div>
       <div className="mt-8 overflow-x-auto border-b border-primary whitespace-nowrap"><div className="flex min-w-max gap-8">{tabs.map((tab) => <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`border-b-2 px-1 pb-3 text-sm font-medium ${activeTab === tab.id ? "border-accent text-primary" : "border-transparent text-muted-foreground"}`}>{tab.label}</button>)}</div></div>
       {isLoading ? <div className="py-20 text-center text-muted-foreground">Loading library...</div> : <div className="py-8">
