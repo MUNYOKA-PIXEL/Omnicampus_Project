@@ -6,6 +6,7 @@ import {
   Search,
   Users,
   Stethoscope,
+  Bot,
   LogOut,
   User,
 } from "lucide-react";
@@ -18,6 +19,7 @@ const allNavItems = [
   { path: "/lost-found", label: "Lost & Found", icon: Search, roles: ["superadmin", "student"] },
   { path: "/clubs", label: "Clubs", icon: Users, roles: ["superadmin", "clubadmin", "student"] },
   { path: "/medical", label: "Medical", icon: Stethoscope, roles: ["superadmin", "medadmin", "student"] },
+  { path: "/assistant", label: "AI Assistant", icon: Bot, roles: ["superadmin", "student"] },
   { path: "/profile", label: "Profile", icon: User, roles: ["superadmin", "student", "libadmin", "medadmin", "clubadmin"] },
 ];
 
