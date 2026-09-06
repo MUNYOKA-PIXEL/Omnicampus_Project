@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import {
   Bot,
   BookOpen,
@@ -33,6 +33,7 @@ const AIAssistantPage = () => {
 	const { profile } = useAuth();
 	const [input, setInput] = useState("");
 	const [isTyping, setIsTyping] = useState(false);
+	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([
 		{
 			id: 0,
@@ -40,6 +41,10 @@ const AIAssistantPage = () => {
 			text: "Hi! I’m Omni-Intelligence. I can help you find campus information about the library, clubs, medical services, and lost and found.",
 		},
 	]);
+
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+	}, [messages, isTyping]);
 
 	const sendMessage = async (event?: FormEvent) => {
 		event?.preventDefault();
@@ -126,6 +131,7 @@ const AIAssistantPage = () => {
 											<UserRound className="h-4 w-4" />
 										</div>
 									)}
+								<div ref={messagesEndRef} aria-hidden="true" />
 								</div>
 							))}
 							{isTyping && (
