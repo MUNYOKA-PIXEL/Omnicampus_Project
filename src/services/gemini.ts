@@ -3,10 +3,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const MODELS = [
-  { name: "gemini-1.5-flash", version: "v1" },
-  { name: "gemini-1.5-flash-8b", version: "v1" },
-  { name: "gemini-1.5-pro", version: "v1" },
-  { name: "gemini-2.0-flash", version: "v1beta" },
+  { name: "gemini-3.6-flash", version: "v1beta" },
+  { name: "gemini-3.6-pro", version: "v1beta" },
 ];
 
 export const generateCampusResponse = createServerFn({ method: "POST" })
