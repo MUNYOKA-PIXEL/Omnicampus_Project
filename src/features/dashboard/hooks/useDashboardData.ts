@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
-import { generateCampusResponse } from "@/services/gemini";
+import { generateCampusResponse } from "@/services/gemini-client";
 
 export const useDashboardData = (user: any, role: string | null) => {
   const isSuperAdmin = role === "superadmin";

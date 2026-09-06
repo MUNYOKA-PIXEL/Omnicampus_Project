@@ -1,8 +1,6 @@
-// @ts-nocheck
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getCampusContext } from "./campusContext";
-
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
+import { createServerFn } from "@tanstack/react-start";
+import { z } from "zod";
 
 const MODELS = [
   { name: "gemini-1.5-flash", version: "v1" },
@@ -11,32 +9,44 @@ const MODELS = [
   { name: "gemini-2.0-flash", version: "v1beta" },
 ];
 
-export const generateCampusResponse = async (
-  userPrompt: string, 
-  userProfile?: { course?: string | null; year_of_study?: number | null }, 
-  userId?: string
-) => {
-  try {
-    if (!GEMINI_API_KEY) {
-      console.error("[Omni-Intelligence] API Key not found.");
-      return "The AI Agent's API Key is missing. Please contact your USIU system administrator.";
+export const generateCampusResponse = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      userPrompt: z.string().min(1).max(4000),
+      userProfile: z
+        .object({
+          course: z.string().nullable().optional(),
+          year_of_study: z.number().nullable().optional(),
+        })
+        .optional(),
+      context: z.object({
+        availableBooks: z.array(z.string()),
+        upcomingEvents: z.array(z.string()),
+        medicalAvailability: z.array(z.string()),
+        recentLostFound: z.array(z.string()),
+      }),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("[Omni-Intelligence] GEMINI_API_KEY is not configured.");
+      return "The AI Agent is not configured. Please contact your USIU system administrator.";
     }
 
-    const context = await getCampusContext();
-    
     const systemPrompt = `
-      You are Omni-Intelligence, the official USIU-Africa Campus Agent. 
+      You are Omni-Intelligence, the official USIU-Africa Campus Agent.
       Your goal is to help students navigate campus life efficiently.
 
       Student Profile:
-      - Course: ${userProfile?.course || "Not specified"}
-      - Year of Study: ${userProfile?.year_of_study || "Not specified"}
+      - Course: ${data.userProfile?.course || "Not specified"}
+      - Year of Study: ${data.userProfile?.year_of_study || "Not specified"}
 
       Current Campus Context (REAL-TIME DATA):
-      - Available Books: ${context.availableBooks.join(", ") || "None currently listed"}
-      - Upcoming Events: ${context.upcomingEvents.join(", ") || "None scheduled"}
-      - Doctors Available: ${context.medicalAvailability.join(", ") || "No doctors currently available"}
-      - Recent Lost & Found: ${context.recentLostFound.join(", ") || "No recent reports"}
+      - Available Books: ${data.context.availableBooks.join(", ") || "None currently listed"}
+      - Upcoming Events: ${data.context.upcomingEvents.join(", ") || "None scheduled"}
+      - Doctors Available: ${data.context.medicalAvailability.join(", ") || "No doctors currently available"}
+      - Recent Lost & Found: ${data.context.recentLostFound.join(", ") || "No recent reports"}
 
       Guidelines:
       1. Be professional, helpful, and energetic.
@@ -49,28 +59,23 @@ export const generateCampusResponse = async (
     const lastErrors: string[] = [];
     for (const config of MODELS) {
       try {
-        const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: config.name }, { apiVersion: config.version as any });
-
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel(
+          { model: config.name },
+          { apiVersion: config.version as "v1" | "v1beta" },
+        );
         const result = await model.generateContent([
           { text: systemPrompt },
-          { text: `User Question: ${userPrompt}` }
+          { text: `User Question: ${data.userPrompt}` },
         ]);
-        
         return result.response.text();
-      } catch (e: unknown) {
-        const error = e as Error;
-        console.warn(`[Gemini Fallback] Model ${config.name} failed:`, error.message);
-        lastErrors.push(`${config.name}: ${error.message}`);
-        continue; 
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`[Gemini Fallback] Model ${config.name} failed:`, message);
+        lastErrors.push(`${config.name}: ${message}`);
       }
     }
 
-    throw new Error(`All AI models failed. Last error: ${lastErrors[0]}`);
-    
-  } catch (error: unknown) {
-    const err = error as Error;
-    console.error("[USIU Campus Agent] Final Error:", err);
-    return `Connection Error: ${err.message}. I'm having trouble accessing USIU campus data right now. Please try again later.`;
-  }
-};
+    console.error("[USIU Campus Agent] All models failed:", lastErrors[0]);
+    return "Connection Error: I'm having trouble accessing USIU campus data right now. Please try again later.";
+  });
