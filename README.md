@@ -147,8 +147,13 @@ supabase/
 
 ## Deployment Notes
 
+- Production URL: https://omnicampus-campus.vercel.app
+- Vercel framework preset: TanStack Start
+- Vercel build command: `npm run build`
 - Configure `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` as client environment variables.
 - Configure `GEMINI_API_KEY` only as a server environment variable.
+- In Supabase Auth URL Configuration, set the Site URL to `https://omnicampus-campus.vercel.app`.
+- Add `https://omnicampus-campus.vercel.app/reset-password` as a Supabase Auth redirect URL.
 - Apply all Supabase migrations before deploying the frontend.
 - Verify RLS policies with test accounts for every role.
 - Do not commit `.env` or any service credentials.
