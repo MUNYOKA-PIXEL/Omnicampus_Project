@@ -14,7 +14,9 @@ export const fetchUserRole = async (userId: string): Promise<AppRole | null> => 
 export const fetchUserProfile = async (userId: string) => {
   const { data } = await supabase
     .from("profiles")
-    .select("full_name, student_id, avatar_url, course, year_of_study, email, phone")
+    .select(
+      "full_name, student_id, avatar_url, course, academic_level, year_of_study, email, phone",
+    )
     .eq("id", userId)
     .maybeSingle();
   return data;
@@ -23,29 +25,47 @@ export const fetchUserProfile = async (userId: string) => {
 export const signUpUser = async (
   email: string,
   password: string,
-  metadata: { full_name: string; student_id?: string; phone?: string }
+  metadata: {
+    full_name: string;
+    student_id?: string;
+    phone?: string;
+    academic_level?: string;
+    course?: string;
+    year_of_study?: number;
+  },
 ) => {
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { 
+      data: {
         full_name: metadata.full_name,
         student_id: metadata.student_id,
-        phone: metadata.phone
+        phone: metadata.phone,
+        academic_level: metadata.academic_level,
+        course: metadata.course,
+        year_of_study: metadata.year_of_study,
       },
       emailRedirectTo: window.location.origin,
     },
   });
 
   if (!error) {
-    const { data: { user: newUser } } = await supabase.auth.getUser();
+    const {
+      data: { user: newUser },
+    } = await supabase.auth.getUser();
     if (newUser) {
-      await supabase.from("profiles").update({
-        student_id: metadata.student_id || null,
-        phone: metadata.phone || null,
-        full_name: metadata.full_name,
-      }).eq("id", newUser.id);
+      await supabase
+        .from("profiles")
+        .update({
+          student_id: metadata.student_id || null,
+          phone: metadata.phone || null,
+          full_name: metadata.full_name,
+          academic_level: metadata.academic_level || null,
+          course: metadata.course || null,
+          year_of_study: metadata.year_of_study || null,
+        })
+        .eq("id", newUser.id);
     }
   }
 
@@ -53,10 +73,7 @@ export const signUpUser = async (
 };
 
 export const updateUserProfile = async (userId: string, updates: any) => {
-  const { error } = await supabase
-    .from("profiles")
-    .update(updates)
-    .eq("id", userId);
+  const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
   return { error };
 };
 

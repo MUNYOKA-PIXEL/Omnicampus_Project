@@ -9,6 +9,9 @@ const Register = () => {
   const [studentIdVal, setStudentIdVal] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [academicLevel, setAcademicLevel] = useState("");
+  const [course, setCourse] = useState("");
+  const [yearOfStudy, setYearOfStudy] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -22,7 +25,11 @@ const Register = () => {
       return;
     }
     if (password.length < 6) {
-      toast({ title: "Error", description: "Password must be at least 6 characters", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Password must be at least 6 characters",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -31,13 +38,19 @@ const Register = () => {
       full_name: `${firstName} ${lastName}`,
       student_id: studentIdVal,
       phone,
+      academic_level: academicLevel,
+      course,
+      year_of_study: yearOfStudy ? Number(yearOfStudy) : undefined,
     });
     setIsLoading(false);
 
     if (error) {
       toast({ title: "Registration Failed", description: error.message, variant: "destructive" });
     } else {
-      toast({ title: "Success", description: "Account created! Please check your email to verify." });
+      toast({
+        title: "Success",
+        description: "Account created! Please check your email to verify.",
+      });
       navigate("/login");
     }
   };
@@ -56,7 +69,9 @@ const Register = () => {
           <form onSubmit={handleRegister} className="p-8">
             <div className="grid grid-cols-2 gap-6 mb-6">
               <div>
-                <label className="block mb-2 text-muted-foreground text-sm font-medium">First Name</label>
+                <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                  First Name
+                </label>
                 <input
                   type="text"
                   value={firstName}
@@ -67,7 +82,9 @@ const Register = () => {
                 />
               </div>
               <div>
-                <label className="block mb-2 text-muted-foreground text-sm font-medium">Last Name</label>
+                <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                  Last Name
+                </label>
                 <input
                   type="text"
                   value={lastName}
@@ -80,7 +97,9 @@ const Register = () => {
             </div>
 
             <div className="mb-6">
-              <label className="block mb-2 text-muted-foreground text-sm font-medium">Student ID</label>
+              <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                Student ID
+              </label>
               <input
                 type="text"
                 value={studentIdVal}
@@ -91,8 +110,63 @@ const Register = () => {
               />
             </div>
 
+            <div className="mb-6 grid grid-cols-2 gap-4">
+              <div>
+                <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                  Academic Level
+                </label>
+                <select
+                  value={academicLevel}
+                  onChange={(e) => setAcademicLevel(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-card border border-border rounded-md text-foreground focus:outline-none focus:border-accent"
+                >
+                  <option value="">Select level</option>
+                  <option>Undergraduate</option>
+                  <option>Postgraduate</option>
+                  <option>Diploma</option>
+                  <option>Certificate</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                  Year of Study
+                </label>
+                <select
+                  value={yearOfStudy}
+                  onChange={(e) => setYearOfStudy(e.target.value)}
+                  required
+                  className="w-full px-4 py-3 bg-card border border-border rounded-md text-foreground focus:outline-none focus:border-accent"
+                >
+                  <option value="">Select year</option>
+                  {[1, 2, 3, 4, 5].map((year) => (
+                    <option key={year} value={year}>
+                      {year === 5 ? "Year 5+" : `Year ${year}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
             <div className="mb-6">
-              <label className="block mb-2 text-muted-foreground text-sm font-medium">Email Address</label>
+              <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                Course / Major
+              </label>
+              <input
+                type="text"
+                value={course}
+                onChange={(e) => setCourse(e.target.value)}
+                placeholder="e.g. Computer Science"
+                required
+                className="w-full px-4 py-3 bg-card border border-border rounded-md text-foreground focus:outline-none focus:border-accent"
+              />
+            </div>
+
+            <div className="mb-6">
+              <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                Email Address
+              </label>
               <input
                 type="email"
                 value={email}
@@ -104,7 +178,9 @@ const Register = () => {
             </div>
 
             <div className="mb-6">
-              <label className="block mb-2 text-muted-foreground text-sm font-medium">Phone Number</label>
+              <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                Phone Number
+              </label>
               <input
                 type="tel"
                 value={phone}
@@ -116,7 +192,9 @@ const Register = () => {
             </div>
 
             <div className="mb-6">
-              <label className="block mb-2 text-muted-foreground text-sm font-medium">Password</label>
+              <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                Password
+              </label>
               <input
                 type="password"
                 value={password}
@@ -129,7 +207,9 @@ const Register = () => {
             </div>
 
             <div className="mb-6">
-              <label className="block mb-2 text-muted-foreground text-sm font-medium">Confirm Password</label>
+              <label className="block mb-2 text-muted-foreground text-sm font-medium">
+                Confirm Password
+              </label>
               <input
                 type="password"
                 value={confirmPassword}
