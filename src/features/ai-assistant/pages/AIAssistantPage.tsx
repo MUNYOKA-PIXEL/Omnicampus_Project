@@ -14,12 +14,19 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/context/AuthContext";
-import { generateCampusResponse } from "@/services/gemini-client";
+import { runCampusAgentStep, type CampusAgentStep } from "@/services/gemini-client";
+import { toolRegistry } from "@/services/tools";
 
 interface ChatMessage {
   id: number;
   role: "assistant" | "user";
   text: string;
+}
+
+interface PendingAction {
+	tool: string;
+	args: CampusAgentStep["args"];
+	prompt: string;
 }
 
 const suggestedPrompts = [
@@ -30,9 +37,10 @@ const suggestedPrompts = [
 ];
 
 const AIAssistantPage = () => {
-	const { profile } = useAuth();
+	const { profile, user } = useAuth();
 	const [input, setInput] = useState("");
 	const [isTyping, setIsTyping] = useState(false);
+	const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
 	const messagesEndRef = useRef<HTMLDivElement>(null);
 	const [messages, setMessages] = useState<ChatMessage[]>([
 		{
@@ -46,6 +54,55 @@ const AIAssistantPage = () => {
 		messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
 	}, [messages, isTyping]);
 
+	const addAssistantMessage = (text: string) => {
+		setMessages((current) => [...current, { id: Date.now(), role: "assistant", text }]);
+	};
+
+	const completeToolAction = async (prompt: string, tool: string, args: CampusAgentStep["args"]) => {
+		if (!user) {
+			addAssistantMessage("Please sign in again before I access your campus information.");
+			return;
+		}
+
+		const executeTool = toolRegistry[tool];
+		if (!executeTool) {
+			addAssistantMessage("I do not have permission to perform that campus action yet.");
+			return;
+		}
+
+		const result = await executeTool(user.id, args);
+		const finalStep = await runCampusAgentStep(
+			prompt,
+			{ course: profile?.course, year_of_study: profile?.year_of_study },
+			{ name: tool, result },
+		);
+		if (finalStep.type === "final") {
+			addAssistantMessage(finalStep.message);
+			return;
+		}
+		addAssistantMessage("I could not complete that request safely. Please provide a little more detail.");
+	};
+
+	const processAgentStep = async (prompt: string, step: CampusAgentStep) => {
+		if (step.type === "final") {
+			addAssistantMessage(step.message);
+			return;
+		}
+
+		if (!step.tool || !toolRegistry[step.tool]) {
+			addAssistantMessage("I could not identify a safe campus action for that request.");
+			return;
+		}
+
+		if (step.requiresConfirmation) {
+			setPendingAction({ tool: step.tool, args: step.args, prompt });
+			addAssistantMessage(`${step.message || "I can carry out that action for you."} Please confirm below before I continue.`);
+			return;
+		}
+
+		await completeToolAction(prompt, step.tool, step.args);
+	};
+
 	const sendMessage = async (event?: FormEvent) => {
 		event?.preventDefault();
 		const prompt = input.trim();
@@ -56,23 +113,27 @@ const AIAssistantPage = () => {
 		setIsTyping(true);
 
 		try {
-			const response = await generateCampusResponse(prompt, {
+			const step = await runCampusAgentStep(prompt, {
 				course: profile?.course,
 				year_of_study: profile?.year_of_study,
 			});
-			setMessages((current) => [
-				...current,
-				{ id: Date.now() + 1, role: "assistant", text: response },
-			]);
+			await processAgentStep(prompt, step);
 		} catch {
-			setMessages((current) => [
-				...current,
-				{
-					id: Date.now() + 1,
-					role: "assistant",
-					text: "I couldn’t connect to campus services right now. Please try again in a moment.",
-				},
-			]);
+			addAssistantMessage("I couldn’t connect to campus services right now. Please try again in a moment.");
+		} finally {
+			setIsTyping(false);
+		}
+	};
+
+	const confirmAction = async () => {
+		if (!pendingAction) return;
+		const action = pendingAction;
+		setPendingAction(null);
+		setIsTyping(true);
+		try {
+			await completeToolAction(action.prompt, action.tool, action.args);
+		} catch {
+			addAssistantMessage("I couldn’t complete that action right now. Please try again later.");
 		} finally {
 			setIsTyping(false);
 		}
@@ -129,6 +190,16 @@ const AIAssistantPage = () => {
 									{message.role === "user" && (
 										<div className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-primary">
 											<UserRound className="h-4 w-4" />
+										</div>
+									)}
+									{pendingAction && (
+										<div className="rounded-xl border border-accent/50 bg-accent/10 p-4 text-sm text-foreground">
+											<p className="font-semibold">I’m ready to use {pendingAction.tool}.</p>
+											<p className="mt-1 text-muted-foreground">This action can change your campus records. Confirm only if the details are correct.</p>
+											<div className="mt-3 flex gap-2">
+												<Button type="button" size="sm" onClick={() => void confirmAction()}>Confirm action</Button>
+												<Button type="button" size="sm" variant="outline" onClick={() => { setPendingAction(null); addAssistantMessage("No problem. I left that action unchanged."); }}>Cancel</Button>
+											</div>
 										</div>
 									)}
 								<div ref={messagesEndRef} aria-hidden="true" />

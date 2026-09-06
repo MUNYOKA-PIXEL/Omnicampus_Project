@@ -7,6 +7,16 @@ const MODELS = [
   { name: "gemini-3.6-pro", version: "v1beta" },
 ];
 
+const agentArgsSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]));
+
+const agentStepSchema = z.object({
+  type: z.enum(["final", "tool_call"]),
+  message: z.string().default(""),
+  tool: z.string().optional(),
+  args: agentArgsSchema.default({}),
+  requiresConfirmation: z.boolean().default(false),
+});
+
 function cleanAssistantResponse(response: string): string {
   return response
     .replace(/^#{1,6}\s*/gm, "")
@@ -15,6 +25,91 @@ function cleanAssistantResponse(response: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+function parseAgentStep(response: string) {
+  const normalized = response.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  return agentStepSchema.parse(JSON.parse(normalized));
+}
+
+export const runCampusAgentStep = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      userPrompt: z.string().min(1).max(4000),
+      userProfile: z
+        .object({
+          course: z.string().nullable().optional(),
+          year_of_study: z.number().nullable().optional(),
+        })
+        .optional(),
+      context: z.object({
+        availableBooks: z.array(z.string()),
+        upcomingEvents: z.array(z.string()),
+        medicalAvailability: z.array(z.string()),
+        recentLostFound: z.array(z.string()),
+      }),
+      toolResult: z
+        .object({ name: z.string(), result: z.string() })
+        .optional(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return {
+        type: "final" as const,
+        message: "The campus assistant is not configured yet. Please contact the system administrator.",
+        args: {},
+        requiresConfirmation: false,
+      };
+    }
+
+    const prompt = `
+You are Omni-Intelligence, a warm and practical USIU-Africa campus agent.
+Return exactly one JSON object and no Markdown. The object must match this shape:
+{"type":"final"|"tool_call","message":"string","tool":"optional string","args":{},"requiresConfirmation":false}
+
+Available tools:
+- readAppointments: read the signed-in student's appointments. Args: {}
+- countAppointments: count the signed-in student's appointments. Args: {}
+- readCourses: list available courses. Args: {}
+- countCourses: count available courses. Args: {}
+- insertAppointment: book an appointment. Args: {"doctor_id":"string","date":"YYYY-MM-DD","time":"HH:MM","reason":"optional string"}
+
+Rules:
+1. Use a tool when the question needs account or catalog data.
+2. Never invent doctor IDs, appointment times, or database results.
+3. For insertAppointment, set requiresConfirmation to true and do not execute it until the student confirms.
+4. If required booking details are missing, return a final question instead of a tool call.
+5. After a tool result is provided, return a concise, human-sounding final answer.
+6. Do not request student IDs, passwords, or private UUIDs.
+
+Student profile: ${JSON.stringify(data.userProfile ?? {})}
+Campus context: ${JSON.stringify(data.context)}
+Student request: ${data.userPrompt}
+${data.toolResult ? `Tool result from ${data.toolResult.name}: ${data.toolResult.result}` : ""}
+`;
+
+    for (const config of MODELS) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel(
+          { model: config.name },
+          { apiVersion: config.version as "v1" | "v1beta" },
+        );
+        const result = await model.generateContent(prompt);
+        return parseAgentStep(result.response.text());
+      } catch (error) {
+        console.warn(`[Gemini Agent] Model ${config.name} failed:`, error);
+      }
+    }
+
+    return {
+      type: "final" as const,
+      message: "I couldn't complete that campus request right now. Please try again in a moment.",
+      args: {},
+      requiresConfirmation: false,
+    };
+  });
 
 export const generateCampusResponse = createServerFn({ method: "POST" })
   .validator(
