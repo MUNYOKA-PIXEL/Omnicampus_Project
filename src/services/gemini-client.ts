@@ -1,4 +1,3 @@
-import { getCampusContext } from "./campusContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
   generateCampusResponse as generateCampusResponseServer,
@@ -18,32 +17,33 @@ export type CampusConversationTurn = {
   text: string;
 };
 
-export type CampusRole = "superadmin" | "student" | "libadmin" | "medadmin" | "clubadmin";
-
 export const generateCampusResponse = async (
   userPrompt: string,
-  userProfile?: { course?: string | null; year_of_study?: number | null },
   conversationHistory?: CampusConversationTurn[],
 ) => {
-  const context = await getCampusContext();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("You must be signed in to use the campus assistant.");
+  }
   return generateCampusResponseServer({
-    data: { userPrompt, userProfile, context, conversationHistory },
+    data: { userPrompt, conversationHistory, accessToken: session.access_token },
   });
 };
 
 export const runCampusAgentStep = async (
   userPrompt: string,
-  userProfile?: { course?: string | null; year_of_study?: number | null },
   toolResult?: { name: string; result: string },
-  role: CampusRole = "student",
   conversationHistory?: CampusConversationTurn[],
 ): Promise<CampusAgentStep> => {
-  const context = await getCampusContext();
-  const { data: { session } } = await supabase.auth.getSession();
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
   if (!session?.access_token) {
     throw new Error("You must be signed in to use the campus agent.");
   }
   return runCampusAgentStepServer({
-    data: { userPrompt, userProfile, context, toolResult, role, accessToken: session.access_token, conversationHistory },
+    data: { userPrompt, toolResult, accessToken: session.access_token, conversationHistory },
   });
 };

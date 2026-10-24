@@ -17,6 +17,7 @@ const tabs: { id: Tab; label: string }[] = [
 const emptyDoctor = { name: "", specialty: "" };
 const emptyMedicine = { name: "", price: "", type: "" };
 const emptyResource = { title: "", file_url: "" };
+const emptyAppointment = { user_id: "", doctor_id: "", date: "", time: "", reason: "" };
 const formatDate = (date: string) => new Date(`${date}T00:00:00`).toLocaleDateString();
 
 const MedicalAdminPage = () => {
@@ -29,10 +30,14 @@ const MedicalAdminPage = () => {
   const [resources, setResources] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState<"doctor" | "medicine" | "resource" | null>(null);
+  const [modal, setModal] = useState<"appointment" | "doctor" | "medicine" | "resource" | null>(
+    null,
+  );
   const [doctorForm, setDoctorForm] = useState(emptyDoctor);
   const [medicineForm, setMedicineForm] = useState(emptyMedicine);
   const [resourceForm, setResourceForm] = useState(emptyResource);
+  const [appointmentForm, setAppointmentForm] = useState(emptyAppointment);
+  const [isSavingAppointment, setIsSavingAppointment] = useState(false);
 
   const loadData = async () => {
     setLoading(true);
@@ -52,6 +57,20 @@ const MedicalAdminPage = () => {
           .order("created_at", { ascending: false }),
         supabase.from("profiles").select("id, full_name, email, student_id"),
       ]);
+    if (appointmentsResult.error) {
+      toast({
+        title: "Appointments could not be loaded",
+        description: appointmentsResult.error.message,
+        variant: "destructive",
+      });
+    }
+    if (profilesResult.error) {
+      toast({
+        title: "Campus accounts could not be loaded",
+        description: profilesResult.error.message,
+        variant: "destructive",
+      });
+    }
     setAppointments(appointmentsResult.data || []);
     setDoctors(doctorsResult.data || []);
     setMedications(medicationsResult.data || []);
@@ -91,6 +110,36 @@ const MedicalAdminPage = () => {
       return;
     }
     toast({ title: "Appointment updated", description: `Appointment marked ${status}.` });
+    await loadData();
+  };
+  const saveAppointment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!appointmentForm.user_id || !appointmentForm.doctor_id) return;
+
+    setIsSavingAppointment(true);
+    const { error } = await supabase.from("appointments").insert({
+      user_id: appointmentForm.user_id,
+      doctor_id: appointmentForm.doctor_id,
+      date: appointmentForm.date,
+      time: appointmentForm.time,
+      reason: appointmentForm.reason.trim() || null,
+    });
+    setIsSavingAppointment(false);
+    if (error) {
+      toast({
+        title: "Appointment booking failed",
+        description: error.message,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAppointmentForm(emptyAppointment);
+    closeModal();
+    toast({
+      title: "Appointment requested",
+      description: "The appointment was added to the schedule as pending confirmation.",
+    });
     await loadData();
   };
   const saveDoctor = async (event: React.FormEvent) => {
@@ -169,6 +218,15 @@ const MedicalAdminPage = () => {
             <p className="mt-2 text-muted-foreground">Manage campus health center records</p>
           </div>
           <div className="flex flex-wrap gap-3">
+            <button
+              onClick={() => {
+                setAppointmentForm(emptyAppointment);
+                setModal("appointment");
+              }}
+              className="inline-flex items-center gap-2 rounded-md bg-primary px-5 py-3 font-semibold text-primary-foreground"
+            >
+              <CalendarCheck className="h-4 w-4" /> Book Appointment
+            </button>
             <button
               onClick={() => setModal("doctor")}
               className="inline-flex items-center gap-2 rounded-md bg-accent px-5 py-3 font-semibold text-accent-foreground"
@@ -425,6 +483,89 @@ const MedicalAdminPage = () => {
             )}
           </div>
         )}
+        {modal === "appointment" && (
+          <Modal title="Book Appointment for a Person" onClose={closeModal}>
+            <form onSubmit={saveAppointment} className="space-y-5">
+              <label className="block text-sm font-semibold text-muted-foreground">
+                Campus account
+                <select
+                  required
+                  value={appointmentForm.user_id}
+                  onChange={(event) =>
+                    setAppointmentForm({ ...appointmentForm, user_id: event.target.value })
+                  }
+                  className="mt-2 w-full rounded-md border border-border bg-background px-4 py-3 font-normal text-foreground"
+                >
+                  <option value="">Select who the appointment is for</option>
+                  {Object.values(profiles)
+                    .sort((a, b) => (a.full_name || "").localeCompare(b.full_name || ""))
+                    .map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.full_name || "Unnamed account"}
+                        {profile.student_id ? ` · ${profile.student_id}` : ""}
+                        {profile.email ? ` · ${profile.email}` : ""}
+                      </option>
+                    ))}
+                </select>
+                {Object.keys(profiles).length === 0 && (
+                  <span className="mt-1 block text-xs text-destructive">
+                    No campus accounts are available. Check account access and reload.
+                  </span>
+                )}
+              </label>
+              <label className="block text-sm font-semibold text-muted-foreground">
+                Practitioner
+                <select
+                  required
+                  value={appointmentForm.doctor_id}
+                  onChange={(event) =>
+                    setAppointmentForm({ ...appointmentForm, doctor_id: event.target.value })
+                  }
+                  className="mt-2 w-full rounded-md border border-border bg-background px-4 py-3 font-normal text-foreground"
+                >
+                  <option value="">Select an available practitioner</option>
+                  {doctors
+                    .filter((doctor) => doctor.available)
+                    .map((doctor) => (
+                      <option key={doctor.id} value={doctor.id}>
+                        {doctor.name} ({doctor.specialty})
+                      </option>
+                    ))}
+                </select>
+              </label>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Date"
+                  type="date"
+                  min={new Date().toISOString().slice(0, 10)}
+                  value={appointmentForm.date}
+                  onChange={(value) => setAppointmentForm({ ...appointmentForm, date: value })}
+                  required
+                />
+                <Field
+                  label="Time"
+                  type="time"
+                  value={appointmentForm.time}
+                  onChange={(value) => setAppointmentForm({ ...appointmentForm, time: value })}
+                  required
+                />
+              </div>
+              <Field
+                label="Reason (optional)"
+                value={appointmentForm.reason}
+                onChange={(value) => setAppointmentForm({ ...appointmentForm, reason: value })}
+              />
+              <Submit
+                label={isSavingAppointment ? "Booking..." : "Create Pending Appointment"}
+                disabled={
+                  isSavingAppointment ||
+                  Object.keys(profiles).length === 0 ||
+                  doctors.filter((doctor) => doctor.available).length === 0
+                }
+              />
+            </form>
+          </Modal>
+        )}
         {modal === "doctor" && (
           <Modal title="New Practitioner" onClose={closeModal}>
             <form onSubmit={saveDoctor} className="space-y-5">
@@ -526,8 +667,12 @@ const Field = ({ label, value, onChange, ...props }: any) => (
     />
   </label>
 );
-const Submit = ({ label }: { label: string }) => (
-  <button className="w-full rounded-md bg-primary py-4 font-bold text-primary-foreground hover:bg-usiu-dark-blue">
+const Submit = ({ label, disabled = false }: { label: string; disabled?: boolean }) => (
+  <button
+    type="submit"
+    disabled={disabled}
+    className="w-full rounded-md bg-primary py-4 font-bold text-primary-foreground hover:bg-usiu-dark-blue disabled:cursor-not-allowed disabled:opacity-50"
+  >
     {label}
   </button>
 );
