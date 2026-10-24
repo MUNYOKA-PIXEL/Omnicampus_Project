@@ -109,10 +109,10 @@ export const useDashboardData = (user: any, role: string | null) => {
         .slice(1)
         .slice(-10)
         .map((message) => ({
-          role: message.type === "user" ? "user" as const : "assistant" as const,
+          role: message.type === "user" ? ("user" as const) : ("assistant" as const),
           text: message.text,
         }));
-      const response = await generateCampusResponse(userMessage, undefined, conversationHistory);
+      const response = await generateCampusResponse(userMessage, conversationHistory);
       setChatMessages((prev) => [...prev, { type: "bot", text: response }]);
     } catch (error) {
       setChatMessages((prev) => [

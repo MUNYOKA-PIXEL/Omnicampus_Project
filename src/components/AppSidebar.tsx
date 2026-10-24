@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -13,25 +12,52 @@ import {
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getRoleLabel } from "@/types/roles";
 
+interface AppSidebarProps {
+  mobile?: boolean;
+  onNavigate?: () => void;
+}
+
 const allNavItems = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard, roles: ["superadmin", "student"] },
-  { path: "/library", label: "Library", icon: BookOpen, roles: ["superadmin", "libadmin", "student"] },
+  {
+    path: "/dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    roles: ["superadmin", "student"],
+  },
+  {
+    path: "/library",
+    label: "Library",
+    icon: BookOpen,
+    roles: ["superadmin", "libadmin", "student"],
+  },
   { path: "/lost-found", label: "Lost & Found", icon: Search, roles: ["superadmin", "student"] },
   { path: "/clubs", label: "Clubs", icon: Users, roles: ["superadmin", "clubadmin", "student"] },
-  { path: "/medical", label: "Medical", icon: Stethoscope, roles: ["superadmin", "medadmin", "student"] },
-  { path: "/assistant", label: "AI Assistant", icon: Bot, roles: ["superadmin", "student", "libadmin", "medadmin", "clubadmin"] },
-  { path: "/profile", label: "Profile", icon: User, roles: ["superadmin", "student", "libadmin", "medadmin", "clubadmin"] },
+  {
+    path: "/medical",
+    label: "Medical",
+    icon: Stethoscope,
+    roles: ["superadmin", "medadmin", "student"],
+  },
+  {
+    path: "/assistant",
+    label: "AI Assistant",
+    icon: Bot,
+    roles: ["superadmin", "student", "libadmin", "medadmin", "clubadmin"],
+  },
+  {
+    path: "/profile",
+    label: "Profile",
+    icon: User,
+    roles: ["superadmin", "student", "libadmin", "medadmin", "clubadmin"],
+  },
 ];
 
-
-const AppSidebar = () => {
+const AppSidebar = ({ mobile = false, onNavigate }: AppSidebarProps) => {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, role, signOut } = useAuth();
 
-  const navItems = allNavItems.filter(
-    (item) => !role || item.roles.includes(role)
-  );
+  const navItems = allNavItems.filter((item) => !role || item.roles.includes(role));
 
   const handleLogout = async () => {
     await signOut();
@@ -39,10 +65,15 @@ const AppSidebar = () => {
   };
 
   return (
-    <aside className="w-[280px] bg-primary text-primary-foreground flex flex-col fixed h-screen overflow-y-auto z-[100]" style={{ boxShadow: "2px 0 10px rgba(0,0,0,0.1)" }}>
+    <aside
+      className={`${mobile ? "relative h-full w-full" : "fixed z-[100] hidden h-screen w-[280px] overflow-y-auto lg:flex"} flex flex-col bg-primary text-primary-foreground`}
+      style={{ boxShadow: "2px 0 10px rgba(0,0,0,0.1)" }}
+    >
       <div className="p-8 border-b border-primary-foreground/20">
         <h2 className="text-[1.8rem] font-bold text-accent tracking-wider">OmniCampus</h2>
-        <p className="text-[0.8rem] text-primary-foreground/80 tracking-[2px] mt-1">CAMPUS MANAGEMENT</p>
+        <p className="text-[0.8rem] text-primary-foreground/80 tracking-[2px] mt-1">
+          CAMPUS MANAGEMENT
+        </p>
       </div>
       <nav className="flex-1 py-6">
         <ul>
@@ -58,6 +89,7 @@ const AppSidebar = () => {
                       ? "bg-accent text-primary font-semibold border-l-[3px] border-primary-foreground"
                       : "text-primary-foreground/80 hover:bg-accent/20 hover:text-primary-foreground"
                   }`}
+                  onClick={onNavigate}
                 >
                   <Icon className="w-5 h-5" />
                   <span>{item.label}</span>
@@ -71,7 +103,9 @@ const AppSidebar = () => {
         <div className="text-primary-foreground text-sm">
           <p className="my-1">{profile?.full_name || "User"}</p>
           <p className="my-1 text-primary-foreground/60">
-            {role === "student" ? `Student ID: ${profile?.student_id || "N/A"}` : getRoleLabel(role)}
+            {role === "student"
+              ? `Student ID: ${profile?.student_id || "N/A"}`
+              : getRoleLabel(role)}
           </p>
         </div>
         <button
