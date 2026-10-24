@@ -95,6 +95,12 @@ Run TypeScript validation:
 npx tsc --noEmit
 ```
 
+Run the regression tests:
+
+```bash
+npm test
+```
+
 Run linting:
 
 ```bash
@@ -151,7 +157,7 @@ supabase/
 
 ## Routing and Rendering
 
-TanStack Start provides the application shell and server functions. The root route mounts `ClientApp`, which waits for the browser to mount before rendering the existing React Router application. Feature pages are therefore client-rendered rather than server-rendered.
+TanStack Start provides the application shell and server functions. The root route mounts `ClientApp`, which waits for the browser to mount before rendering the existing React Router application. Feature pages are therefore client-rendered rather than server-rendered. React Router page components are lazy-loaded, so each page's JavaScript is fetched when that route is opened.
 
 This routing arrangement is being preserved for compatibility. A migration to TanStack Router and server-rendered feature routes should be handled as a separate, tested project.
 
