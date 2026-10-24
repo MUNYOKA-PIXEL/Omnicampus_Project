@@ -7,9 +7,14 @@ import type { Database } from "@/integrations/supabase/types";
 import { getCampusContext, getCampusDate } from "./campusContext";
 
 const MODELS = [
-  { name: "gemini-3.8-flash", version: "v1beta" },
+  { name: "gemini-3.5-flash-lite", version: "v1beta" },
   { name: "gemini-3.6-flash", version: "v1beta" },
+  { name: "gemini-3.8-flash", version: "v1beta" },
 ];
+
+function logStageDuration(stage: string, startedAt: number) {
+  console.info(`[Omni-Intelligence] ${stage} completed in ${Date.now() - startedAt}ms.`);
+}
 
 const agentArgsSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]));
 const conversationHistorySchema = z
@@ -118,7 +123,9 @@ export const runCampusAgentStep = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    let stageStartedAt = Date.now();
     const authenticated = await getAuthenticatedAgentContext(data.accessToken);
+    logStageDuration("Authentication and profile lookup", stageStartedAt);
     if (!authenticated) {
       return {
         type: "final" as const,
@@ -137,7 +144,12 @@ export const runCampusAgentStep = createServerFn({ method: "POST" })
         requiresConfirmation: false,
       };
     }
-    const context = await getCampusContext(authenticated.supabase);
+    stageStartedAt = Date.now();
+    const context = await getCampusContext(
+      authenticated.supabase,
+      [...(data.conversationHistory?.map((turn) => turn.text) ?? []), data.userPrompt].join("\n"),
+    );
+    logStageDuration("Relevant campus context lookup", stageStartedAt);
 
     const prompt = `
 You are Omni-Intelligence, a warm and practical USIU-Africa campus agent.
@@ -185,15 +197,21 @@ ${data.toolResult ? `Tool result from ${data.toolResult.name}: ${data.toolResult
 
     for (const config of MODELS) {
       try {
+        stageStartedAt = Date.now();
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel(
           {
             model: config.name,
-            generationConfig: { responseMimeType: "application/json", temperature: 0.2 },
+            generationConfig: {
+              responseMimeType: "application/json",
+              temperature: 0.2,
+              maxOutputTokens: 512,
+            },
           },
           { apiVersion: config.version as "v1" | "v1beta" },
         );
         const result = await model.generateContent(prompt);
+        logStageDuration(`Model response (${config.name})`, stageStartedAt);
         return parseAgentStep(result.response.text());
       } catch (error) {
         console.warn(`[Gemini Agent] Model ${config.name} failed:`, error);
@@ -217,7 +235,9 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
     }),
   )
   .handler(async ({ data }) => {
+    let stageStartedAt = Date.now();
     const authenticated = await getAuthenticatedAgentContext(data.accessToken);
+    logStageDuration("Authentication and profile lookup", stageStartedAt);
     if (!authenticated) {
       return "Please sign in again before using the campus assistant.";
     }
@@ -226,7 +246,12 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
       console.error("[Omni-Intelligence] GEMINI_API_KEY is not configured.");
       return "The AI Agent is not configured. Please contact your USIU system administrator.";
     }
-    const context = await getCampusContext(authenticated.supabase);
+    stageStartedAt = Date.now();
+    const context = await getCampusContext(
+      authenticated.supabase,
+      [...(data.conversationHistory?.map((turn) => turn.text) ?? []), data.userPrompt].join("\n"),
+    );
+    logStageDuration("Relevant campus context lookup", stageStartedAt);
 
     const systemPrompt = `
       You are Omni-Intelligence, the official USIU-Africa Campus Agent.
@@ -263,15 +288,20 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
     const lastErrors: string[] = [];
     for (const config of MODELS) {
       try {
+        stageStartedAt = Date.now();
         const genAI = new GoogleGenerativeAI(apiKey);
         const model = genAI.getGenerativeModel(
-          { model: config.name, generationConfig: { temperature: 0.4 } },
+          {
+            model: config.name,
+            generationConfig: { temperature: 0.4, maxOutputTokens: 512 },
+          },
           { apiVersion: config.version as "v1" | "v1beta" },
         );
         const result = await model.generateContent([
           { text: systemPrompt },
           { text: `User Question: ${data.userPrompt}` },
         ]);
+        logStageDuration(`Model response (${config.name})`, stageStartedAt);
         return cleanAssistantResponse(result.response.text());
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
