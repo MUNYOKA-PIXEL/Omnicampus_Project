@@ -5,10 +5,13 @@ import {
   CalendarDays,
   HeartPulse,
   Loader2,
+  MessageSquareText,
   PanelRightOpen,
+  Plus,
   Send,
   Search,
   Sparkles,
+  Trash2,
   UserRound,
   Users,
 } from "lucide-react";
@@ -26,6 +29,15 @@ import {
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import {
+  createConversationTitle,
+  deleteSavedConversation,
+  listSavedConversations,
+  parseConversationMessages,
+  saveConversation,
+  type ConversationMessage,
+  type SavedConversation,
+} from "@/services/assistant-conversations";
+import {
   runCampusAgentStep,
   type CampusAgentStep,
   type CampusConversationTurn,
@@ -36,12 +48,18 @@ import {
   toolRegistry,
   validateToolArgs,
 } from "@/services/tools";
+import type { AppRole } from "@/types/roles";
 
-interface ChatMessage {
-  id: number;
-  role: "assistant" | "user";
-  text: string;
-}
+type ChatMessage = ConversationMessage;
+
+const createWelcomeMessage = (role: AppRole | null): ChatMessage => ({
+  id: 0,
+  role: "assistant",
+  text:
+    role === "student"
+      ? "Hi! I’m Omni-Intelligence. I can help you find campus information about the library, clubs, medical services, and lost and found."
+      : `Hi! I’m Omni-Intelligence. I’m ready to help with your ${role === "superadmin" ? "campus operations" : role?.replace("admin", " administration")} dashboard.`,
+});
 
 interface PendingAction {
   tool: string;
@@ -141,6 +159,74 @@ const AssistantSupportContent = ({
   </>
 );
 
+const ConversationHistory = ({
+  conversations,
+  activeConversationId,
+  loading,
+  disabled,
+  onSelect,
+  onDelete,
+}: {
+  conversations: SavedConversation[];
+  activeConversationId: string | null;
+  loading: boolean;
+  disabled: boolean;
+  onSelect: (conversation: SavedConversation) => void;
+  onDelete: (conversation: SavedConversation) => void;
+}) => (
+  <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+    <h2 className="flex items-center gap-2 font-semibold text-foreground">
+      <MessageSquareText className="h-4 w-4 text-primary" /> Saved conversations
+    </h2>
+    {loading ? (
+      <p className="mt-3 text-sm text-muted-foreground">Loading your conversations...</p>
+    ) : conversations.length === 0 ? (
+      <p className="mt-3 text-sm text-muted-foreground">
+        Your conversations will appear here after you send a message.
+      </p>
+    ) : (
+      <ul className="mt-3 max-h-80 space-y-2 overflow-y-auto">
+        {conversations.map((conversation) => (
+          <li
+            key={conversation.id}
+            className={`flex items-center gap-1 rounded-lg border ${
+              conversation.id === activeConversationId
+                ? "border-primary/50 bg-primary/5"
+                : "border-transparent hover:bg-muted/60"
+            }`}
+          >
+            <button
+              type="button"
+              onClick={() => onSelect(conversation)}
+              disabled={disabled}
+              className="min-w-0 flex-1 px-3 py-2 text-left disabled:opacity-60"
+              aria-current={conversation.id === activeConversationId ? "true" : undefined}
+            >
+              <span className="block truncate text-sm font-medium text-foreground">
+                {conversation.title}
+              </span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                {new Date(conversation.updated_at).toLocaleDateString()}
+              </span>
+            </button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="mr-1 h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+              onClick={() => onDelete(conversation)}
+              disabled={disabled}
+              aria-label={`Delete conversation: ${conversation.title}`}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </li>
+        ))}
+      </ul>
+    )}
+  </div>
+);
+
 const AIAssistantPage = () => {
   const { user, role } = useAuth();
   const roleContent = assistantRoleContent[role ?? "student"];
@@ -153,7 +239,16 @@ const AIAssistantPage = () => {
   const [appointmentProfilesError, setAppointmentProfilesError] = useState(false);
   const [appointmentUserId, setAppointmentUserId] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const conversationIdRef = useRef<string | null>(null);
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const canBookForOthers = role === "superadmin" || role === "medadmin";
+  const [conversations, setConversations] = useState<SavedConversation[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [isChangingConversation, setIsChangingConversation] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const userId = user?.id;
 
   useEffect(() => {
     if (!canBookForOthers) {
@@ -185,23 +280,148 @@ const AIAssistantPage = () => {
       active = false;
     };
   }, [canBookForOthers]);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: 0,
-      role: "assistant",
-      text:
-        role === "student"
-          ? "Hi! I’m Omni-Intelligence. I can help you find campus information about the library, clubs, medical services, and lost and found."
-          : `Hi! I’m Omni-Intelligence. I’m ready to help with your ${role === "superadmin" ? "campus operations" : role?.replace("admin", " administration")} dashboard.`,
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>(() => [createWelcomeMessage(role)]);
+  const messagesRef = useRef(messages);
+
+  useEffect(() => {
+    if (!userId) {
+      setConversations([]);
+      setHistoryLoading(false);
+      conversationIdRef.current = null;
+      return;
+    }
+
+    let active = true;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    void listSavedConversations(userId)
+      .then((savedConversations) => {
+        if (!active) return;
+        setConversations(savedConversations);
+        const latestConversation = savedConversations[0];
+        if (latestConversation) {
+          const savedMessages = parseConversationMessages(latestConversation.messages);
+          conversationIdRef.current = latestConversation.id;
+          messagesRef.current = savedMessages;
+          setMessages(savedMessages);
+        } else {
+          conversationIdRef.current = null;
+          const welcome = [createWelcomeMessage(role)];
+          messagesRef.current = welcome;
+          setMessages(welcome);
+        }
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to load saved AI conversations:", error);
+        if (active) {
+          setHistoryError("Saved conversations could not be loaded. Please try refreshing.");
+        }
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userId, role]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isTyping]);
 
+  const persistMessages = (nextMessages: ChatMessage[]) => {
+    if (!userId || !nextMessages.some((message) => message.role === "user")) {
+      return Promise.resolve();
+    }
+
+    setSaveStatus("saving");
+    setHistoryError(null);
+    const operation = saveQueueRef.current.then(async () => {
+      const conversation = await saveConversation(userId, conversationIdRef.current, nextMessages);
+      conversationIdRef.current = conversation.id;
+      setConversations((current) =>
+        [conversation, ...current.filter((item) => item.id !== conversation.id)]
+          .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
+          .slice(0, 50),
+      );
+      setSaveStatus("saved");
+    });
+    saveQueueRef.current = operation.catch((error: unknown) => {
+      console.error("Failed to save AI conversation:", error);
+      setSaveStatus("error");
+      setHistoryError(
+        "This conversation could not be saved. It may not be available after you leave this page.",
+      );
+    });
+    return saveQueueRef.current;
+  };
+
   const addAssistantMessage = (text: string) => {
-    setMessages((current) => [...current, { id: Date.now(), role: "assistant", text }]);
+    const assistantMessage: ChatMessage = { id: Date.now(), role: "assistant", text };
+    const nextMessages = [...messagesRef.current, assistantMessage];
+    messagesRef.current = nextMessages;
+    setMessages(nextMessages);
+    void persistMessages(nextMessages);
+  };
+
+  const startNewConversation = async () => {
+    setIsChangingConversation(true);
+    await saveQueueRef.current;
+    conversationIdRef.current = null;
+    const welcome = [createWelcomeMessage(role)];
+    messagesRef.current = welcome;
+    setMessages(welcome);
+    setPendingAction(null);
+    setSaveStatus("idle");
+    setHistoryError(null);
+    setIsChangingConversation(false);
+    setHistoryOpen(false);
+  };
+
+  const openConversation = async (conversation: SavedConversation) => {
+    setIsChangingConversation(true);
+    await saveQueueRef.current;
+    try {
+      const savedMessages = parseConversationMessages(conversation.messages);
+      conversationIdRef.current = conversation.id;
+      messagesRef.current = savedMessages;
+      setMessages(savedMessages);
+      setPendingAction(null);
+      setSaveStatus("saved");
+      setHistoryError(null);
+      setHistoryOpen(false);
+    } catch (error) {
+      console.error("Failed to open saved AI conversation:", error);
+      setHistoryError("This saved conversation could not be opened.");
+    } finally {
+      setIsChangingConversation(false);
+    }
+  };
+
+  const removeConversation = async (conversation: SavedConversation) => {
+    if (!userId || !window.confirm(`Delete "${conversation.title}"? This cannot be undone.`))
+      return;
+    setIsChangingConversation(true);
+    await saveQueueRef.current;
+    try {
+      await deleteSavedConversation(userId, conversation.id);
+      setConversations((current) => current.filter((item) => item.id !== conversation.id));
+      if (conversationIdRef.current === conversation.id) {
+        conversationIdRef.current = null;
+        const welcome = [createWelcomeMessage(role)];
+        messagesRef.current = welcome;
+        setMessages(welcome);
+        setSaveStatus("idle");
+        setPendingAction(null);
+      }
+      setHistoryError(null);
+    } catch (error) {
+      console.error("Failed to delete saved AI conversation:", error);
+      setHistoryError("That conversation could not be deleted. Please try again.");
+    } finally {
+      setIsChangingConversation(false);
+    }
   };
 
   const completeToolAction = async (
@@ -300,17 +520,21 @@ const AIAssistantPage = () => {
   const sendMessage = async (event?: FormEvent) => {
     event?.preventDefault();
     const prompt = input.trim();
-    if (!prompt || isTyping) return;
+    if (!prompt || isTyping || historyLoading || isChangingConversation) return;
 
     setInput("");
-    setMessages((current) => [...current, { id: Date.now(), role: "user", text: prompt }]);
-    setIsTyping(true);
-    const conversationHistory = messages
+    const conversationHistory = messagesRef.current
       .slice(1)
       .slice(-10)
       .map(({ role: messageRole, text }) => ({ role: messageRole, text }));
+    const userMessage: ChatMessage = { id: Date.now(), role: "user", text: prompt };
+    const nextMessages = [...messagesRef.current, userMessage];
+    messagesRef.current = nextMessages;
+    setMessages(nextMessages);
+    setIsTyping(true);
 
     try {
+      await persistMessages(nextMessages);
       const step = await runCampusAgentStep(prompt, undefined, conversationHistory);
       await processAgentStep(prompt, step, conversationHistory);
     } catch {
@@ -337,7 +561,7 @@ const AIAssistantPage = () => {
     }
     setPendingAction(null);
     setIsTyping(true);
-    const conversationHistory = messages
+    const conversationHistory = messagesRef.current
       .slice(1)
       .slice(-10)
       .map(({ role: messageRole, text }) => ({ role: messageRole, text }));
@@ -367,6 +591,18 @@ const AIAssistantPage = () => {
     setInput(label);
     setSuggestionsOpen(false);
   };
+
+  const historyDisabled = isTyping || historyLoading || isChangingConversation;
+  const historyContent = (
+    <ConversationHistory
+      conversations={conversations}
+      activeConversationId={conversationIdRef.current}
+      loading={historyLoading}
+      disabled={historyDisabled}
+      onSelect={(conversation) => void openConversation(conversation)}
+      onDelete={(conversation) => void removeConversation(conversation)}
+    />
+  );
 
   return (
     <DashboardLayout>
@@ -400,6 +636,47 @@ const AIAssistantPage = () => {
                   Your campus information assistant
                 </p>
               </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0 px-2 text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground sm:px-3"
+                onClick={() => void startNewConversation()}
+                disabled={historyDisabled}
+                aria-label="Start a new conversation"
+              >
+                <Plus className="h-4 w-4" />
+                <span className="hidden sm:inline">New chat</span>
+              </Button>
+              <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+                <SheetTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0 text-primary-foreground hover:bg-primary-foreground/15 hover:text-primary-foreground lg:hidden"
+                    aria-label="Open saved conversations"
+                  >
+                    <MessageSquareText className="h-5 w-5" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[min(90vw,22rem)] overflow-y-auto">
+                  <SheetHeader className="text-left">
+                    <SheetTitle>Conversation history</SheetTitle>
+                    <SheetDescription>
+                      Your saved chats are private to your account. You can delete them at any time.
+                    </SheetDescription>
+                  </SheetHeader>
+                  <div className="mt-6 space-y-4">
+                    {historyContent}
+                    {historyError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {historyError}
+                      </p>
+                    )}
+                  </div>
+                </SheetContent>
+              </Sheet>
               <Sheet open={suggestionsOpen} onOpenChange={setSuggestionsOpen}>
                 <SheetTrigger asChild>
                   <Button
@@ -436,6 +713,14 @@ const AIAssistantPage = () => {
               aria-relevant="additions text"
               className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain bg-background/60 p-4 sm:p-7"
             >
+              {historyError && (
+                <p
+                  role="alert"
+                  className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive"
+                >
+                  {historyError}
+                </p>
+              )}
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -542,6 +827,20 @@ const AIAssistantPage = () => {
             </div>
 
             <form onSubmit={sendMessage} className="border-t border-border bg-card p-3 sm:p-5">
+              <p className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span>
+                  Chats are saved privately to your account. Avoid sharing sensitive details.
+                </span>
+                <span aria-live="polite">
+                  {saveStatus === "saving"
+                    ? "Saving..."
+                    : saveStatus === "saved"
+                      ? "Saved"
+                      : saveStatus === "error"
+                        ? "Not saved"
+                        : ""}
+                </span>
+              </p>
               <div className="flex items-end gap-3">
                 <Textarea
                   value={input}
@@ -550,12 +849,13 @@ const AIAssistantPage = () => {
                   placeholder="Ask about campus life..."
                   className="min-h-[48px] min-w-0 resize-none bg-background sm:min-h-[52px]"
                   maxLength={4000}
+                  disabled={historyLoading || isChangingConversation}
                 />
                 <Button
                   type="submit"
                   size="icon"
                   className="h-12 w-12 shrink-0 sm:h-[52px] sm:w-[52px]"
-                  disabled={isTyping || !input.trim()}
+                  disabled={isTyping || historyLoading || isChangingConversation || !input.trim()}
                   aria-label="Send message"
                 >
                   <Send className="h-5 w-5" />
@@ -565,6 +865,12 @@ const AIAssistantPage = () => {
           </section>
 
           <aside className="hidden space-y-4 lg:block">
+            {historyContent}
+            {historyError && (
+              <p role="alert" className="text-sm text-destructive">
+                {historyError}
+              </p>
+            )}
             <AssistantSupportContent roleContent={roleContent} onSelectPrompt={selectPrompt} />
           </aside>
         </div>

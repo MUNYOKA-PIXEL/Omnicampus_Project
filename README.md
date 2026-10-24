@@ -68,8 +68,9 @@ Run every migration in `supabase/migrations` against the target Supabase project
 8. `20260906000004_profile_avatar_storage.sql` — profile avatar storage and policies
 9. `20260907000000_security_hardening.sql` — appointment security and booking validation
 10. `20260907000001_private_storage.sql` — make profile and lost-and-found storage private
+11. `20260907000002_ai_conversation_history.sql` — private AI conversation history and 50-chat retention
 
-The final two migrations are important for the appointment ownership/admin rules and private image access. Verify the target project's migration history before assuming these policies are active.
+The security-hardening and private-storage migrations are important for appointment ownership/admin rules and private image access. The AI conversation migration enables account-private chat history and automatically retains each user's latest 50 conversations. Verify the target project's migration history before assuming these policies are active.
 
 You can use the Supabase SQL Editor or the Supabase CLI. Apply the migrations before testing borrowing, image uploads, profile avatars, or owner/admin status changes.
 
@@ -122,7 +123,7 @@ npm run format
 - Club registry, memberships, events, RSVPs, and club resources
 - Medical appointments, practitioners, pharmacy, and wellness resources
 - Lost and found reports with image uploads, searchable reports, matching, and resolution actions
-- Campus AI assistant
+- Campus AI assistant with private saved conversations (latest 50 per account)
 
 ### Administrators
 
