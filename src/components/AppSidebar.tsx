@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { getRoleLabel } from "@/types/roles";
+import ProfileAvatar from "@/components/ProfileAvatar";
 
 interface AppSidebarProps {
   mobile?: boolean;
@@ -100,13 +101,20 @@ const AppSidebar = ({ mobile = false, onNavigate }: AppSidebarProps) => {
         </ul>
       </nav>
       <div className="p-8 border-t border-primary-foreground/20">
-        <div className="text-primary-foreground text-sm">
-          <p className="my-1">{profile?.full_name || "User"}</p>
-          <p className="my-1 text-primary-foreground/60">
-            {role === "student"
-              ? `Student ID: ${profile?.student_id || "N/A"}`
-              : getRoleLabel(role)}
-          </p>
+        <div className="flex items-center gap-3 text-primary-foreground text-sm">
+          <ProfileAvatar
+            avatarPath={profile?.avatar_url}
+            fullName={profile?.full_name}
+            className="h-11 w-11 border border-primary-foreground/30 bg-primary-foreground/10 font-semibold"
+          />
+          <div className="min-w-0">
+            <p className="my-1 truncate">{profile?.full_name || "User"}</p>
+            <p className="my-1 truncate text-primary-foreground/60">
+              {role === "student"
+                ? `Student ID: ${profile?.student_id || "N/A"}`
+                : getRoleLabel(role)}
+            </p>
+          </div>
         </div>
         <button
           onClick={handleLogout}

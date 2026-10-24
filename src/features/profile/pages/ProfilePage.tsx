@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { BookOpen, Camera, GraduationCap, Mail, Phone, UserRound } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
+import ProfileAvatar from "@/components/ProfileAvatar";
 import { useAuth } from "@/features/auth/context/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
@@ -19,7 +20,7 @@ const ProfilePage = () => {
   });
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -33,26 +34,10 @@ const ProfilePage = () => {
   }, [profile]);
 
   useEffect(() => {
-    let active = true;
-    const resolveAvatar = async () => {
-      if (!profile?.avatar_url) {
-        setAvatarUrl(null);
-        return;
-      }
-      if (profile.avatar_url.startsWith("http")) {
-        setAvatarUrl(profile.avatar_url);
-        return;
-      }
-      const { data } = await supabase.storage
-        .from("profile-avatars")
-        .createSignedUrl(profile.avatar_url, 3600);
-      if (active) setAvatarUrl(data?.signedUrl || null);
-    };
-    void resolveAvatar();
     return () => {
-      active = false;
+      if (avatarPreview) URL.revokeObjectURL(avatarPreview);
     };
-  }, [profile?.avatar_url]);
+  }, [avatarPreview]);
 
   const setField = (field: keyof typeof form, value: string) => {
     setForm((current) => ({ ...current, [field]: value }));
@@ -95,6 +80,8 @@ const ProfilePage = () => {
       });
       return;
     }
+    const previewUrl = URL.createObjectURL(file);
+    setAvatarPreview(previewUrl);
     setUploadingAvatar(true);
     const extension = file.name.split(".").pop() || "jpg";
     const path = `${user.id}/${crypto.randomUUID()}.${extension}`;
@@ -102,6 +89,7 @@ const ProfilePage = () => {
       .from("profile-avatars")
       .upload(path, file, { upsert: false });
     if (upload.error) {
+      setAvatarPreview(null);
       setUploadingAvatar(false);
       toast({ title: "Upload failed", description: upload.error.message, variant: "destructive" });
       return;
@@ -109,18 +97,13 @@ const ProfilePage = () => {
     const { error } = await updateProfile({ avatar_url: path });
     setUploadingAvatar(false);
     if (error) {
+      setAvatarPreview(null);
       toast({ title: "Profile update failed", description: error.message, variant: "destructive" });
       return;
     }
+    setAvatarPreview(null);
     toast({ title: "Profile photo updated", description: "Your new photo is now visible." });
   };
-
-  const initials = (profile?.full_name || "User")
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   return (
     <DashboardLayout>
@@ -135,17 +118,12 @@ const ProfilePage = () => {
         <div className="mt-10 grid gap-8 xl:grid-cols-[365px_1fr]">
           <section className="rounded-xl border border-border bg-card p-8 text-center shadow-usiu">
             <div className="relative mx-auto h-32 w-32">
-              <div className="flex h-32 w-32 items-center justify-center rounded-full border-4 border-accent bg-muted text-4xl font-bold text-primary">
-                {avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt="Profile"
-                    className="h-full w-full rounded-full object-cover"
-                  />
-                ) : (
-                  initials
-                )}
-              </div>
+              <ProfileAvatar
+                avatarPath={profile?.avatar_url}
+                fullName={profile?.full_name}
+                imageOverride={avatarPreview}
+                className="h-32 w-32 border-4 border-accent bg-muted text-4xl font-bold text-primary"
+              />
               <button
                 aria-label="Change profile photo"
                 type="button"
@@ -160,7 +138,11 @@ const ProfilePage = () => {
                 type="file"
                 accept="image/*"
                 className="hidden"
-                onChange={(event) => uploadAvatar(event.target.files?.[0])}
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.currentTarget.value = "";
+                  void uploadAvatar(file);
+                }}
               />
             </div>
             <h2 className="mt-6 text-2xl font-bold text-primary">
