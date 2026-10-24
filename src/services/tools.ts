@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { supabase } from "@/integrations/supabase/client";
 import { z } from "zod";
+import { getCampusDate } from "./campusContext";
 
 /**
  * Counts the number of appointments for a specific user.
@@ -163,13 +164,11 @@ const runAdminMutation = async (
       result = await supabase.from(table).update(args.values).eq("id", args.id);
     if (operation === "delete") result = await supabase.from(table).delete().eq("id", args.id);
     if (result?.error) throw result.error;
-    await supabase
-      .from("ai_audit_logs")
-      .insert({
-        user_id: userId,
-        action: `AI_ADMIN_${operation.toUpperCase()}_${table.toUpperCase()}`,
-        details: args,
-      });
+    await supabase.from("ai_audit_logs").insert({
+      user_id: userId,
+      action: `AI_ADMIN_${operation.toUpperCase()}_${table.toUpperCase()}`,
+      details: args,
+    });
     return `Completed ${operation} on ${table} successfully.`;
   } catch (error) {
     console.error(`Admin AI ${operation} failed for ${table}:`, error);
@@ -185,6 +184,211 @@ const returnBook = async (userId: string, args: Record<string, any>) => {
     .insert({ user_id: userId, action: "AI_ADMIN_RETURN_BOOK", details: args });
   return "The book was marked as returned and the inventory was updated.";
 };
+
+const borrowBook = async (userId: string, args: { book_id: string }) => {
+  const { data, error } = await supabase.rpc("borrow_book", { book_id_input: args.book_id });
+  if (error) {
+    console.error("AI book borrowing failed:", error);
+    return `The book was not borrowed: ${error.message}`;
+  }
+  if (!data) {
+    console.error("AI book borrowing returned no loan record.");
+    return "The book was not borrowed because no loan record was returned.";
+  }
+
+  const { error: auditError } = await supabase.from("ai_audit_logs").insert({
+    user_id: userId,
+    action: "AI_BORROW_BOOK",
+    details: { book_id: args.book_id, loan_id: data.id },
+  });
+  if (auditError) {
+    console.error("Failed to write AI book-borrowing audit log:", auditError);
+  }
+
+  return `The book was borrowed successfully. It is due on ${data.due_date}. Loan reference: ${data.id}.`;
+};
+
+const readLibraryAccount = async (userId: string) => {
+  const [loans, requests] = await Promise.all([
+    supabase
+      .from("book_loans")
+      .select("id, due_date, status, books(title)")
+      .eq("user_id", userId)
+      .order("issue_date", { ascending: false })
+      .limit(20),
+    supabase
+      .from("book_requests")
+      .select("title, author, status, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20),
+  ]);
+  if (loans.error || requests.error) {
+    console.error("Failed to read student library account:", loans.error ?? requests.error);
+    return "I couldn't retrieve your library loans or requests right now.";
+  }
+
+  return JSON.stringify({
+    loans: (loans.data ?? []).map((loan) => ({
+      title: loan.books?.title ?? "Unknown book",
+      due_date: loan.due_date,
+      status: loan.status,
+    })),
+    book_requests: requests.data ?? [],
+  });
+};
+
+const requestBook = async (
+  userId: string,
+  args: { title: string; author?: string; reason?: string },
+) => {
+  const { error } = await supabase.from("book_requests").insert({
+    user_id: userId,
+    title: args.title,
+    author: args.author || null,
+    reason: args.reason || null,
+  });
+  if (error) {
+    console.error("AI book request failed:", error);
+    return `The book request was not submitted: ${error.message}`;
+  }
+  return `Your request for "${args.title}" was submitted to the library team.`;
+};
+
+const cancelAppointment = async (userId: string, args: { appointment_id: string }) => {
+  const { data, error } = await supabase
+    .from("appointments")
+    .update({ status: "cancelled" })
+    .eq("id", args.appointment_id)
+    .eq("user_id", userId)
+    .in("status", ["pending", "confirmed"])
+    .select("id")
+    .maybeSingle();
+  if (error) {
+    console.error("AI appointment cancellation failed:", error);
+    return `The appointment was not cancelled: ${error.message}`;
+  }
+  if (!data)
+    return "The appointment was not cancelled because it was not found or is not cancellable.";
+  return "Your appointment was cancelled.";
+};
+
+const updateClubMembership = async (
+  userId: string,
+  args: { club_id: string; action: "join" | "leave" },
+) => {
+  const { data: club, error: clubError } = await supabase
+    .from("clubs")
+    .select("name")
+    .eq("id", args.club_id)
+    .maybeSingle();
+  if (clubError || !club) {
+    if (clubError) console.error("Failed to validate club membership action:", clubError);
+    return "I couldn't find that club. Please check the club list and try again.";
+  }
+
+  const result =
+    args.action === "join"
+      ? await supabase.from("club_memberships").insert({ club_id: args.club_id, user_id: userId })
+      : await supabase
+          .from("club_memberships")
+          .delete()
+          .eq("club_id", args.club_id)
+          .eq("user_id", userId);
+  if (result.error) {
+    console.error(`AI could not ${args.action} club:`, result.error);
+    return `I couldn't ${args.action} ${club.name}: ${result.error.message}`;
+  }
+  return args.action === "join" ? `You joined ${club.name}.` : `You left ${club.name}.`;
+};
+
+const updateEventRsvp = async (
+  userId: string,
+  args: { event_id: string; action: "attend" | "cancel" },
+) => {
+  const { data: event, error: eventError } = await supabase
+    .from("club_events")
+    .select("title, date")
+    .eq("id", args.event_id)
+    .gte("date", getCampusDate())
+    .maybeSingle();
+  if (eventError || !event) {
+    if (eventError) console.error("Failed to validate event RSVP action:", eventError);
+    return "I couldn't find that upcoming event. Please check the events list and try again.";
+  }
+
+  const result =
+    args.action === "attend"
+      ? await supabase.from("event_rsvps").insert({ event_id: args.event_id, user_id: userId })
+      : await supabase
+          .from("event_rsvps")
+          .delete()
+          .eq("event_id", args.event_id)
+          .eq("user_id", userId);
+  if (result.error) {
+    console.error(`AI could not update event RSVP:`, result.error);
+    return `I couldn't ${args.action === "attend" ? "RSVP to" : "cancel your RSVP for"} ${event.title}: ${result.error.message}`;
+  }
+  return args.action === "attend"
+    ? `Your RSVP for ${event.title} was confirmed.`
+    : `Your RSVP for ${event.title} was cancelled.`;
+};
+
+const createLostFoundReport = async (
+  userId: string,
+  args: {
+    type: "lost" | "found";
+    item_name: string;
+    description?: string;
+    location?: string;
+    date_reported: string;
+  },
+) => {
+  const { error } = await supabase.from("lost_found_items").insert({
+    user_id: userId,
+    type: args.type,
+    item_name: args.item_name,
+    description: args.description || null,
+    location: args.location || null,
+    date_reported: args.date_reported,
+    status: "open",
+  });
+  if (error) {
+    console.error("AI lost-and-found report failed:", error);
+    return `Your ${args.type} item report was not submitted: ${error.message}`;
+  }
+  return `Your ${args.type} item report for "${args.item_name}" was submitted. You can add a photo from the Lost & Found page.`;
+};
+
+const resolveLostFoundReport = async (userId: string, args: { report_id: string }) => {
+  const { data, error } = await supabase
+    .from("lost_found_items")
+    .update({ status: "resolved" })
+    .eq("id", args.report_id)
+    .eq("user_id", userId)
+    .eq("status", "open")
+    .select("item_name, type")
+    .maybeSingle();
+  if (error) {
+    console.error("AI lost-and-found resolution failed:", error);
+    return `Your report was not updated: ${error.message}`;
+  }
+  if (!data) return "Your report was not updated because it was not found or is already resolved.";
+  return data.type === "found"
+    ? `Your report for "${data.item_name}" was marked as claimed.`
+    : `Your report for "${data.item_name}" was marked as found.`;
+};
+
+export const STUDENT_MUTATION_TOOLS = [
+  "insertAppointment",
+  "cancelAppointment",
+  "libraryBorrowBook",
+  "libraryRequestBook",
+  "clubMembership",
+  "eventRsvp",
+  "createLostFoundReport",
+  "resolveLostFoundReport",
+] as const;
 
 export const ADMIN_TOOL_ROLES: Record<string, string[]> = {
   libraryAddBook: ["libadmin", "superadmin"],
@@ -223,6 +427,32 @@ const toolArgumentSchemas: Record<string, z.ZodTypeAny> = {
       reason: z.string().max(500).optional(),
     })
     .strict(),
+  readLibraryAccount: z.object({}).strict(),
+  libraryBorrowBook: z.object({ book_id: z.string().uuid() }).strict(),
+  libraryRequestBook: z
+    .object({
+      title: z.string().trim().min(1).max(200),
+      author: z.string().trim().max(200).optional(),
+      reason: z.string().trim().max(500).optional(),
+    })
+    .strict(),
+  cancelAppointment: z.object({ appointment_id: z.string().uuid() }).strict(),
+  clubMembership: z
+    .object({ club_id: z.string().uuid(), action: z.enum(["join", "leave"]) })
+    .strict(),
+  eventRsvp: z
+    .object({ event_id: z.string().uuid(), action: z.enum(["attend", "cancel"]) })
+    .strict(),
+  createLostFoundReport: z
+    .object({
+      type: z.enum(["lost", "found"]),
+      item_name: z.string().trim().min(1).max(200),
+      description: z.string().trim().max(1000).optional(),
+      location: z.string().trim().max(300).optional(),
+      date_reported: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    })
+    .strict(),
+  resolveLostFoundReport: z.object({ report_id: z.string().uuid() }).strict(),
   libraryAddBook: z
     .object({
       title: z.string().min(1).max(200),
@@ -309,6 +539,15 @@ export const getToolArgsValidationMessage = (tool: string, args: Record<string, 
     date: "provide a valid date",
     time: "provide a valid time",
     reason: "shorten the reason",
+    book_id: "choose a book from the available library list",
+    appointment_id: "choose one of your active appointments",
+    club_id: "choose a club from the club registry",
+    event_id: "choose an upcoming event",
+    report_id: "choose one of your open lost-and-found reports",
+    item_name: "provide an item name",
+    type: "specify whether the item is lost or found",
+    date_reported: "provide a valid report date",
+    title: "provide the requested book title",
   };
   const missingDetails = [
     ...new Set(
@@ -330,6 +569,14 @@ export const toolRegistry: Record<
   readAppointments: (userId: string) => readAppointments(userId),
   insertAppointment: (userId: string, args: any, appointmentUserId?: string) =>
     insertAppointment(userId, args, appointmentUserId),
+  readLibraryAccount: (userId: string) => readLibraryAccount(userId),
+  libraryBorrowBook: (userId, args) => borrowBook(userId, args),
+  libraryRequestBook: (userId, args) => requestBook(userId, args),
+  cancelAppointment: (userId, args) => cancelAppointment(userId, args),
+  clubMembership: (userId, args) => updateClubMembership(userId, args),
+  eventRsvp: (userId, args) => updateEventRsvp(userId, args),
+  createLostFoundReport: (userId, args) => createLostFoundReport(userId, args),
+  resolveLostFoundReport: (userId, args) => resolveLostFoundReport(userId, args),
   countCourses: (userId: string) => countCourses(userId),
   readCourses: (userId: string) => readCourses(userId),
   libraryAddBook: (userId, args) =>

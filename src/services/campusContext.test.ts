@@ -8,6 +8,8 @@ describe("getRequestedContext", () => {
       events: false,
       doctors: false,
       lostFound: false,
+      clubs: false,
+      medications: false,
     });
   });
 
@@ -17,18 +19,24 @@ describe("getRequestedContext", () => {
       events: false,
       doctors: true,
       lostFound: false,
+      clubs: false,
+      medications: false,
     });
     expect(getRequestedContext("What clubs and events are coming up?")).toEqual({
       books: false,
       events: true,
       doctors: false,
       lostFound: false,
+      clubs: true,
+      medications: false,
     });
     expect(getRequestedContext("I lost my library book")).toEqual({
       books: true,
       events: false,
       doctors: false,
       lostFound: true,
+      clubs: false,
+      medications: false,
     });
   });
 
@@ -38,6 +46,35 @@ describe("getRequestedContext", () => {
       events: true,
       doctors: false,
       lostFound: false,
+      clubs: false,
+      medications: false,
+    });
+  });
+
+  it("loads the relevant context for follow-up self-service actions", () => {
+    expect(getRequestedContext("Cancel my appointment and request a book")).toEqual({
+      books: true,
+      events: false,
+      doctors: true,
+      lostFound: false,
+      clubs: false,
+      medications: false,
+    });
+    expect(getRequestedContext("Join a club and RSVP to an event")).toEqual({
+      books: false,
+      events: true,
+      doctors: false,
+      lostFound: false,
+      clubs: true,
+      medications: false,
+    });
+    expect(getRequestedContext("Show available medicines from the pharmacy")).toEqual({
+      books: false,
+      events: false,
+      doctors: false,
+      lostFound: false,
+      clubs: false,
+      medications: true,
     });
   });
 });

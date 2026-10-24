@@ -123,7 +123,7 @@ npm run format
 - Club registry, memberships, events, RSVPs, and club resources
 - Medical appointments, practitioners, pharmacy, and wellness resources
 - Lost and found reports with image uploads, searchable reports, matching, and resolution actions
-- Campus AI assistant with private saved conversations (latest 50 per account)
+- Campus AI assistant with private saved conversations (latest 50 per account), confirmed book borrowing and requests, appointment booking/cancellation, club membership and event RSVP changes, and lost-and-found reports/resolution
 
 ### Administrators
 

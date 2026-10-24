@@ -42,8 +42,10 @@ import {
   type CampusAgentStep,
   type CampusConversationTurn,
 } from "@/services/gemini-client";
+import { getCampusDate } from "@/services/campusContext";
 import {
   ADMIN_TOOL_ROLES,
+  STUDENT_MUTATION_TOOLS,
   getToolArgsValidationMessage,
   toolRegistry,
   validateToolArgs,
@@ -65,6 +67,7 @@ interface PendingAction {
   tool: string;
   args: CampusAgentStep["args"];
   prompt: string;
+  displayText?: string;
 }
 
 interface AppointmentProfile {
@@ -499,15 +502,148 @@ const AIAssistantPage = () => {
       return;
     }
 
+    const validatedArgs = validateToolArgs(step.tool, step.args);
+    if (!validatedArgs) {
+      addAssistantMessage(
+        getToolArgsValidationMessage(step.tool, step.args) ??
+          "I could not validate the details for that action.",
+      );
+      return;
+    }
+
     const requiresConfirmation =
       step.requiresConfirmation ||
-      step.tool === "insertAppointment" ||
+      STUDENT_MUTATION_TOOLS.some((tool) => tool === step.tool) ||
       Boolean(ADMIN_TOOL_ROLES[step.tool]);
     if (requiresConfirmation) {
       if (step.tool === "insertAppointment") {
         setAppointmentUserId(canBookForOthers ? "" : (user?.id ?? ""));
       }
-      setPendingAction({ tool: step.tool, args: step.args, prompt });
+      let displayText: string | undefined;
+      if (!user) {
+        addAssistantMessage("Please sign in again before making this change.");
+        return;
+      }
+      if (step.tool === "libraryBorrowBook") {
+        const { data: book, error } = await supabase
+          .from("books")
+          .select("title, author")
+          .eq("id", String(step.args.book_id ?? ""))
+          .eq("available", true)
+          .maybeSingle();
+        if (error) {
+          console.error("Failed to verify book before borrowing:", error);
+          addAssistantMessage("I couldn’t verify that book is available. Please try again.");
+          return;
+        }
+        if (!book) {
+          addAssistantMessage(
+            "That book is no longer available to borrow. Please check the library.",
+          );
+          return;
+        }
+        displayText = `${book.title}${book.author ? ` by ${book.author}` : ""}`;
+      } else if (step.tool === "cancelAppointment") {
+        const { data: appointment, error } = await supabase
+          .from("appointments")
+          .select("date, time, status, doctors(name)")
+          .eq("id", String(validatedArgs.appointment_id))
+          .eq("user_id", user.id)
+          .in("status", ["pending", "confirmed"])
+          .maybeSingle();
+        if (error || !appointment) {
+          if (error) console.error("Failed to verify appointment cancellation:", error);
+          addAssistantMessage("I couldn’t verify a cancellable appointment for your account.");
+          return;
+        }
+        displayText = `${appointment.doctors?.name ?? "appointment"} on ${appointment.date} at ${appointment.time}`;
+      } else if (step.tool === "libraryRequestBook") {
+        displayText = `Request "${String(validatedArgs.title)}" from the library`;
+      } else if (step.tool === "clubMembership") {
+        const clubId = String(validatedArgs.club_id);
+        const action = String(validatedArgs.action);
+        const { data: club, error } = await supabase
+          .from("clubs")
+          .select("name")
+          .eq("id", clubId)
+          .maybeSingle();
+        if (error || !club) {
+          if (error) console.error("Failed to verify club membership action:", error);
+          addAssistantMessage("I couldn’t find that club in the current registry.");
+          return;
+        }
+        const { data: membership, error: membershipError } = await supabase
+          .from("club_memberships")
+          .select("id")
+          .eq("club_id", clubId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (membershipError) {
+          console.error("Failed to verify club membership:", membershipError);
+          addAssistantMessage("I couldn’t verify your current membership in that club.");
+          return;
+        }
+        if ((action === "join" && membership) || (action === "leave" && !membership)) {
+          addAssistantMessage(
+            action === "join"
+              ? `You’re already a member of ${club.name}.`
+              : `You’re not a member of ${club.name}.`,
+          );
+          return;
+        }
+        displayText = `${action === "join" ? "Join" : "Leave"} ${club.name}`;
+      } else if (step.tool === "eventRsvp") {
+        const eventId = String(validatedArgs.event_id);
+        const action = String(validatedArgs.action);
+        const { data: event, error } = await supabase
+          .from("club_events")
+          .select("title, date, clubs(name)")
+          .eq("id", eventId)
+          .gte("date", getCampusDate())
+          .maybeSingle();
+        if (error || !event) {
+          if (error) console.error("Failed to verify event RSVP:", error);
+          addAssistantMessage("I couldn’t find that upcoming event.");
+          return;
+        }
+        const { data: rsvp, error: rsvpError } = await supabase
+          .from("event_rsvps")
+          .select("id")
+          .eq("event_id", eventId)
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (rsvpError) {
+          console.error("Failed to verify event RSVP status:", rsvpError);
+          addAssistantMessage("I couldn’t verify your current RSVP for that event.");
+          return;
+        }
+        if ((action === "attend" && rsvp) || (action === "cancel" && !rsvp)) {
+          addAssistantMessage(
+            action === "attend"
+              ? `You’re already attending ${event.title}.`
+              : `You don’t have an RSVP for ${event.title}.`,
+          );
+          return;
+        }
+        displayText = `${action === "attend" ? "RSVP to" : "Cancel your RSVP for"} ${event.title} on ${event.date}`;
+      } else if (step.tool === "createLostFoundReport") {
+        displayText = `Submit ${String(validatedArgs.type)} item report: "${String(validatedArgs.item_name)}"`;
+      } else if (step.tool === "resolveLostFoundReport") {
+        const { data: report, error } = await supabase
+          .from("lost_found_items")
+          .select("item_name, type")
+          .eq("id", String(validatedArgs.report_id))
+          .eq("user_id", user.id)
+          .eq("status", "open")
+          .maybeSingle();
+        if (error || !report) {
+          if (error) console.error("Failed to verify lost-and-found report:", error);
+          addAssistantMessage("I couldn’t find an open report owned by your account to resolve.");
+          return;
+        }
+        displayText = `Resolve your ${report.type} report for "${report.item_name}"`;
+      }
+      setPendingAction({ tool: step.tool, args: validatedArgs, prompt, displayText });
       addAssistantMessage(
         `${step.message || "I can carry out that action for you."} Please confirm below before I continue.`,
       );
@@ -755,10 +891,16 @@ const AIAssistantPage = () => {
               )}
               {pendingAction && (
                 <div className="rounded-xl border border-accent/50 bg-accent/10 p-4 text-sm text-foreground">
-                  <p className="font-semibold">I’m ready to use {pendingAction.tool}.</p>
+                  <p className="font-semibold">
+                    {pendingAction.displayText
+                      ? `Confirm: ${pendingAction.displayText}?`
+                      : `I’m ready to use ${pendingAction.tool}.`}
+                  </p>
                   <p className="mt-1 text-muted-foreground">
-                    This action can change your campus records. Confirm only if the details are
+                    This will change your account’s campus records. Confirm only if the details are
                     correct.
+                    {pendingAction.tool === "createLostFoundReport" &&
+                      " This report cannot include a photo; you can add one from the Lost & Found page."}
                   </p>
                   {pendingAction.tool === "insertAppointment" && canBookForOthers && (
                     <label className="mt-3 block font-medium text-foreground">
@@ -807,7 +949,9 @@ const AIAssistantPage = () => {
                     >
                       {pendingAction.tool === "insertAppointment"
                         ? "Confirm appointment"
-                        : "Confirm action"}
+                        : pendingAction.tool === "libraryBorrowBook"
+                          ? "Borrow this book"
+                          : "Confirm"}
                     </Button>
                     <Button
                       type="button"
