@@ -1,6 +1,6 @@
-// @ts-nocheck
 import { supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/types/roles";
+import type { Database } from "@/integrations/supabase/types";
 
 export const fetchUserRole = async (userId: string): Promise<AppRole | null> => {
   const { data } = await supabase
@@ -74,7 +74,10 @@ export const signUpUser = async (
   return { error: error as Error | null };
 };
 
-export const updateUserProfile = async (userId: string, updates: any) => {
+export const updateUserProfile = async (
+  userId: string,
+  updates: Partial<Database["public"]["Tables"]["profiles"]["Update"]>,
+) => {
   const { error } = await supabase.from("profiles").update(updates).eq("id", userId);
   return { error };
 };

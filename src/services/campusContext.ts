@@ -16,8 +16,10 @@ interface CampusContextRequest {
   lostFound: boolean;
 }
 
-const getRequestedContext = (requestText: string): CampusContextRequest => ({
-  books: /\b(book|books|library|borrow|textbook|reading)\b/i.test(requestText),
+export const getRequestedContext = (requestText: string): CampusContextRequest => ({
+  books: /\b(book(?!\s+(?:an?\s+)?appointment)|books|library|borrow|textbook|reading)\b/i.test(
+    requestText,
+  ),
   events: /\b(event|events|club|clubs|happening|calendar|activity|activities)\b/i.test(requestText),
   doctors:
     /\b(doctor|doctors|clinic|medical|appointment|appointments|health|nurse|medication)\b/i.test(

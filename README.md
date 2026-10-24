@@ -56,16 +56,20 @@ OmniCampus is a campus management platform for students and administrators. It b
 
 ## Database Setup
 
-Run the migrations in `supabase/migrations` against the target Supabase project in filename order:
+Run every migration in `supabase/migrations` against the target Supabase project in filename order:
 
-1. Initial schema and RLS policies
-2. Public statistics RPC
-3. Library admin policy correction
-4. Library borrowing and returning workflow
-5. Lost and found image storage
-6. Lost and found resolution permissions
-7. Profile academic level
-8. Profile avatar storage
+1. `20260822000000_initial_schema.sql` — initial schema and RLS policies
+2. `20260822000001_public_stats.sql` — public statistics RPC
+3. `20260822000002_library_admin_policies.sql` — library admin policy correction
+4. `20260906000000_library_student_workflow.sql` — library and student workflows
+5. `20260906000001_lost_found_images.sql` — lost-and-found image storage and policies
+6. `20260906000002_lost_found_resolution.sql` — lost-and-found resolution permissions
+7. `20260906000003_profile_academic_level.sql` — profile academic level
+8. `20260906000004_profile_avatar_storage.sql` — profile avatar storage and policies
+9. `20260907000000_security_hardening.sql` — appointment security and booking validation
+10. `20260907000001_private_storage.sql` — make profile and lost-and-found storage private
+
+The final two migrations are important for the appointment ownership/admin rules and private image access. Verify the target project's migration history before assuming these policies are active.
 
 You can use the Supabase SQL Editor or the Supabase CLI. Apply the migrations before testing borrowing, image uploads, profile avatars, or owner/admin status changes.
 
@@ -144,6 +148,12 @@ src/
 supabase/
   migrations/       Ordered database and storage migrations
 ```
+
+## Routing and Rendering
+
+TanStack Start provides the application shell and server functions. The root route mounts `ClientApp`, which waits for the browser to mount before rendering the existing React Router application. Feature pages are therefore client-rendered rather than server-rendered.
+
+This routing arrangement is being preserved for compatibility. A migration to TanStack Router and server-rendered feature routes should be handled as a separate, tested project.
 
 ## Deployment Notes
 

@@ -16,7 +16,10 @@ function logStageDuration(stage: string, startedAt: number) {
   console.info(`[Omni-Intelligence] ${stage} completed in ${Date.now() - startedAt}ms.`);
 }
 
-const agentArgsSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]));
+const agentArgsSchema = z.record(
+  z.string(),
+  z.union([z.string(), z.number(), z.boolean(), z.null()]),
+);
 const conversationHistorySchema = z
   .array(
     z.object({
