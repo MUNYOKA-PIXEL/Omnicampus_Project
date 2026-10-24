@@ -7,15 +7,21 @@ import type { Database } from "@/integrations/supabase/types";
 
 const MODELS = [
   { name: "gemini-3.6-flash", version: "v1beta" },
-  { name: "gemini-3.6-pro", version: "v1beta" },
+  { name: "gemini-3.8-flash", version: "v1beta" },
 ];
 
 const agentArgsSchema = z.record(z.union([z.string(), z.number(), z.boolean(), z.null()]));
+const conversationHistorySchema = z.array(
+  z.object({
+    role: z.enum(["user", "assistant"]),
+    text: z.string().min(1).max(2000),
+  }),
+).max(10).optional();
 
 const agentStepSchema = z.object({
   type: z.enum(["final", "tool_call"]),
   message: z.string().default(""),
-  tool: z.string().optional(),
+  tool: z.string().nullable().optional().transform((tool) => tool ?? undefined),
   args: agentArgsSchema.default({}),
   requiresConfirmation: z.boolean().default(false),
 });
@@ -65,10 +71,22 @@ function parseAgentStep(response: string) {
   return agentStepSchema.parse(JSON.parse(normalized));
 }
 
+function getCampusDate() {
+  const dateParts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Africa/Nairobi",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const parts = Object.fromEntries(dateParts.map(({ type, value }) => [type, value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
 export const runCampusAgentStep = createServerFn({ method: "POST" })
   .validator(
     z.object({
       userPrompt: z.string().min(1).max(4000),
+      conversationHistory: conversationHistorySchema,
       accessToken: z.string().min(20),
       userProfile: z
         .object({
@@ -110,6 +128,7 @@ export const runCampusAgentStep = createServerFn({ method: "POST" })
 
     const prompt = `
 You are Omni-Intelligence, a warm and practical USIU-Africa campus agent.
+Current date in Nairobi (Africa/Nairobi): ${getCampusDate()}
 Return exactly one JSON object and no Markdown. The object must match this shape:
 {"type":"final"|"tool_call","message":"string","tool":"optional string","args":{},"requiresConfirmation":false}
 
@@ -135,10 +154,13 @@ Rules:
 6. If required details are missing, return a final question instead of a tool call.
 7. After a tool result is provided, return a concise, human-sounding final answer.
 8. Do not request student IDs, passwords, or private UUIDs.
+9. Resolve relative dates like "today" and "tomorrow" using the current Nairobi date above. Do not ask the student to convert a clear relative date into YYYY-MM-DD; use the resolved date in tool arguments.
 
 Signed-in role: ${authenticated.role}
 Student profile: ${JSON.stringify(authenticated.userProfile ?? {})}
 Campus context: ${JSON.stringify(data.context)}
+Recent conversation:
+${(data.conversationHistory ?? []).map((turn) => `${turn.role === "user" ? "Student" : "Assistant"}: ${turn.text}`).join("\n") || "No earlier messages."}
 Student request: ${data.userPrompt}
 ${data.toolResult ? `Tool result from ${data.toolResult.name}: ${data.toolResult.result}` : ""}
 `;
@@ -169,6 +191,7 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
   .validator(
     z.object({
       userPrompt: z.string().min(1).max(4000),
+      conversationHistory: conversationHistorySchema,
       userProfile: z
         .object({
           course: z.string().nullable().optional(),
@@ -193,6 +216,7 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
     const systemPrompt = `
       You are Omni-Intelligence, the official USIU-Africa Campus Agent.
       Your goal is to help students navigate campus life efficiently.
+      Current date in Nairobi (Africa/Nairobi): ${getCampusDate()}
 
       Student Profile:
       - Course: ${data.userProfile?.course || "Not specified"}
@@ -204,6 +228,9 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
       - Doctors Available: ${data.context.medicalAvailability.join(", ") || "No doctors currently available"}
       - Recent Lost & Found: ${data.context.recentLostFound.join(", ") || "No recent reports"}
 
+      Recent conversation:
+      ${(data.conversationHistory ?? []).map((turn) => `${turn.role === "user" ? "Student" : "Assistant"}: ${turn.text}`).join("\n") || "No earlier messages."}
+
       Guidelines:
       1. Sound like a warm, knowledgeable human campus staff member, not a robot.
       2. Use simple, natural language and keep answers concise unless the student asks for detail.
@@ -212,6 +239,8 @@ export const generateCampusResponse = createServerFn({ method: "POST" })
       5. If a student asks for something not in the context, say that plainly and suggest the relevant campus service.
       6. Do not use Markdown, asterisks, hashtags, code formatting, or formal section headings.
       7. NEVER ask for Student IDs or private UUIDs.
+      8. Use the recent conversation to understand follow-up messages and references.
+      9. Resolve relative dates like "today" and "tomorrow" using the current Nairobi date above instead of asking the student to convert them to YYYY-MM-DD.
     `;
 
     const lastErrors: string[] = [];

@@ -15,7 +15,7 @@ import DashboardLayout from "@/components/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/features/auth/context/AuthContext";
-import { runCampusAgentStep, type CampusAgentStep } from "@/services/gemini-client";
+import { runCampusAgentStep, type CampusAgentStep, type CampusConversationTurn } from "@/services/gemini-client";
 import { ADMIN_TOOL_ROLES, toolRegistry, validateToolArgs } from "@/services/tools";
 
 interface ChatMessage {
@@ -103,7 +103,12 @@ const AIAssistantPage = () => {
 		setMessages((current) => [...current, { id: Date.now(), role: "assistant", text }]);
 	};
 
-	const completeToolAction = async (prompt: string, tool: string, args: CampusAgentStep["args"]) => {
+	const completeToolAction = async (
+		prompt: string,
+		tool: string,
+		args: CampusAgentStep["args"],
+		conversationHistory: CampusConversationTurn[],
+	) => {
 		if (!user) {
 			addAssistantMessage("Please sign in again before I access your campus information.");
 			return;
@@ -130,6 +135,7 @@ const AIAssistantPage = () => {
 			{ course: profile?.course, year_of_study: profile?.year_of_study },
 			{ name: tool, result },
 			role ?? "student",
+			conversationHistory,
 		);
 		if (finalStep.type === "final") {
 			addAssistantMessage(finalStep.message);
@@ -138,7 +144,11 @@ const AIAssistantPage = () => {
 		addAssistantMessage("I could not complete that request safely. Please provide a little more detail.");
 	};
 
-	const processAgentStep = async (prompt: string, step: CampusAgentStep) => {
+	const processAgentStep = async (
+		prompt: string,
+		step: CampusAgentStep,
+		conversationHistory: CampusConversationTurn[],
+	) => {
 		if (step.type === "final") {
 			addAssistantMessage(step.message);
 			return;
@@ -153,13 +163,17 @@ const AIAssistantPage = () => {
 			return;
 		}
 
-		if (step.requiresConfirmation) {
+		const requiresConfirmation =
+			step.requiresConfirmation ||
+			step.tool === "insertAppointment" ||
+			Boolean(ADMIN_TOOL_ROLES[step.tool]);
+		if (requiresConfirmation) {
 			setPendingAction({ tool: step.tool, args: step.args, prompt });
 			addAssistantMessage(`${step.message || "I can carry out that action for you."} Please confirm below before I continue.`);
 			return;
 		}
 
-		await completeToolAction(prompt, step.tool, step.args);
+		await completeToolAction(prompt, step.tool, step.args, conversationHistory);
 	};
 
 	const sendMessage = async (event?: FormEvent) => {
@@ -170,13 +184,17 @@ const AIAssistantPage = () => {
 		setInput("");
 		setMessages((current) => [...current, { id: Date.now(), role: "user", text: prompt }]);
 		setIsTyping(true);
+		const conversationHistory = messages
+			.slice(1)
+			.slice(-10)
+			.map(({ role: messageRole, text }) => ({ role: messageRole, text }));
 
 		try {
 			const step = await runCampusAgentStep(prompt, {
 				course: profile?.course,
 				year_of_study: profile?.year_of_study,
-			}, undefined, role ?? "student");
-			await processAgentStep(prompt, step);
+			}, undefined, role ?? "student", conversationHistory);
+			await processAgentStep(prompt, step, conversationHistory);
 		} catch {
 			addAssistantMessage("I couldn’t connect to campus services right now. Please try again in a moment.");
 		} finally {
@@ -189,8 +207,12 @@ const AIAssistantPage = () => {
 		const action = pendingAction;
 		setPendingAction(null);
 		setIsTyping(true);
+		const conversationHistory = messages
+			.slice(1)
+			.slice(-10)
+			.map(({ role: messageRole, text }) => ({ role: messageRole, text }));
 		try {
-			await completeToolAction(action.prompt, action.tool, action.args);
+			await completeToolAction(action.prompt, action.tool, action.args, conversationHistory);
 		} catch {
 			addAssistantMessage("I couldn’t complete that action right now. Please try again later.");
 		} finally {
