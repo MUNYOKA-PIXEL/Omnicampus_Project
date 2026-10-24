@@ -8,7 +8,7 @@ import { fileURLToPath, URL } from "node:url";
 export default defineConfig({
   plugins: [tanstackStart(), nitro(), react(), tailwindcss()],
   ssr: {
-    noExternal: ["react-router-dom", "react-router"],
+    noExternal: ["react", "react-dom", "react-router-dom", "react-router"],
   },
   resolve: {
     alias: {
