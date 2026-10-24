@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { AppRole } from "@/types/roles";
@@ -54,6 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [role, setRole] = useState<AppRole | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const currentUserId = useRef<string | null>(null);
 
   const loadUserData = async (userId: string) => {
     const [userRole, userProfile] = await Promise.all([
@@ -83,11 +84,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let active = true;
     let loadGeneration = 0;
 
-    const applySession = async (newSession: Session | null) => {
+    const applySession = async (newSession: Session | null, isTokenRefresh = false) => {
+      if (isTokenRefresh && newSession?.user.id === currentUserId.current) {
+        setSession(newSession);
+        setUser(newSession.user);
+        return;
+      }
+
       const generation = ++loadGeneration;
       setSession(newSession);
       setUser(newSession?.user ?? null);
       setLoading(true);
+      currentUserId.current = newSession?.user.id ?? null;
 
       if (!newSession?.user) {
         if (active && generation === loadGeneration) {
@@ -108,8 +116,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, newSession) => {
-      void applySession(newSession);
+    } = supabase.auth.onAuthStateChange((event, newSession) => {
+      void applySession(newSession, event === "TOKEN_REFRESHED");
     });
 
     supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
